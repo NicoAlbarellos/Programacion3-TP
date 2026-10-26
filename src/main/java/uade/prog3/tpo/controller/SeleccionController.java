@@ -50,18 +50,20 @@ public class SeleccionController {
     }
 
     /**
-     * GET /api/seleccion/quicksort?criterio=valor
-     * criterio admite: valor | peso | ratio
+     * GET /api/seleccion/quicksort?criterio=valor&orden=desc
+     * criterio admite: valor | peso | ratio. orden admite: asc | desc
      */
     @GetMapping("/quicksort")
-    public List<Item> quickSort(@RequestParam(defaultValue = "ratio") String criterio) {
-        return ordenamiento.quickSort(todos(), comparador(criterio));
+    public List<Item> quickSort(@RequestParam(defaultValue = "ratio") String criterio,
+                                @RequestParam(defaultValue = "asc") String orden) {
+        return ordenamiento.quickSort(todos(), comparador(criterio, orden));
     }
 
-    /** GET /api/seleccion/mergesort?criterio=peso */
+    /** GET /api/seleccion/mergesort?criterio=peso&orden=asc */
     @GetMapping("/mergesort")
-    public List<Item> mergeSort(@RequestParam(defaultValue = "ratio") String criterio) {
-        return ordenamiento.mergeSort(todos(), comparador(criterio));
+    public List<Item> mergeSort(@RequestParam(defaultValue = "ratio") String criterio,
+                                @RequestParam(defaultValue = "asc") String orden) {
+        return ordenamiento.mergeSort(todos(), comparador(criterio, orden));
     }
 
     /** GET /api/seleccion/repartir?contenedores=3 */
@@ -71,6 +73,16 @@ public class SeleccionController {
             throw new IllegalArgumentException("La cantidad de contenedores debe ser al menos 1");
         }
         return ramificacionYPoda.repartir(todos(), contenedores);
+    }
+
+    private Comparator<Item> comparador(String criterio, String orden) {
+        Comparator<Item> ascendente = comparador(criterio);
+        return switch (orden) {
+            case "asc"  -> ascendente;
+            case "desc" -> ascendente.reversed();
+            default -> throw new IllegalArgumentException(
+                    "Orden invalido: " + orden + ". Use asc o desc");
+        };
     }
 
     private Comparator<Item> comparador(String criterio) {
