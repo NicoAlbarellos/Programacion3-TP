@@ -133,17 +133,18 @@ utilidad/peso **no** dé el óptimo de la mochila 0/1 (la comparación con núme
 |---|---|---|---|
 | BFS | `GET /api/grafo/bfs` | ¿Qué lugares se alcanzan desde acá, por cantidad de tramos? | Implementado |
 | DFS | `GET /api/grafo/dfs` | ¿Qué lugares se alcanzan desde acá, recorriendo en profundidad? | Implementado |
-| Dijkstra | `GET /api/grafo/dijkstra` | Ruta más rápida (en minutos) entre dos refugios | En desarrollo |
+| Dijkstra | `GET /api/grafo/dijkstra` | Ruta más rápida (en minutos) entre dos refugios | Implementado |
 | Floyd-Warshall | `GET /api/grafo/floyd` | Tabla de tiempos mínimos entre todos los lugares | En desarrollo |
-| Prim / Kruskal | `GET /api/grafo/prim`, `/kruskal` | Mínimo de calles a despejar para conectar todos los refugios | En desarrollo |
+| Prim / Kruskal (Union-Find) | `GET /api/grafo/prim`, `/kruskal` | Mínimo de calles a despejar para conectar todos los refugios | Implementado |
 | Backtracking | `GET /api/grafo/rutas` | Rutas de escape con tiempo máximo y cantidad máxima de paradas | En desarrollo |
-| QuickSort / MergeSort | `GET /api/seleccion/quicksort`, `/mergesort` | Suministros ordenados por peso, utilidad o ratio | En desarrollo |
+| QuickSort / MergeSort | `GET /api/seleccion/quicksort`, `/mergesort` | Suministros ordenados por peso, utilidad o ratio | Implementado |
 | Greedy | `GET /api/seleccion/greedy` | Qué llevar en la mochila eligiendo por ratio utilidad/peso | En desarrollo |
 | Mochila 0/1 (PD) | `GET /api/seleccion/dinamica` | Qué llevar en la mochila para maximizar la utilidad (óptimo) | En desarrollo |
 | Branch & Bound | `GET /api/seleccion/repartir` | Repartir los suministros entre k sobrevivientes minimizando la carga máxima | En desarrollo |
 
 El detalle de cada endpoint (parámetros, ejemplo real, complejidad y estructura) está en
-[`docs/ENDPOINTS.md`](docs/ENDPOINTS.md).
+[`docs/ENDPOINTS.md`](docs/ENDPOINTS.md). Los cálculos a mano sobre nuestro grafo (Dijkstra, Prim y
+Kruskal paso a paso) están en [`docs/VERIFICACIONES.md`](docs/VERIFICACIONES.md).
 
 ---
 
@@ -257,7 +258,7 @@ Usamos **Claude Code (Anthropic)** como asistente durante el trabajo, para:
 - discutir y cuestionar el diseño del dominio y de cada algoritmo antes de programarlo;
 - implementación asistida de algoritmos y tests;
 - revisión de código (correctitud, legibilidad, reglas de la consigna);
-- redacción de la documentación (este README, `docs/ENDPOINTS.md`).
+- redacción de la documentación (este README, `docs/ENDPOINTS.md`, `docs/VERIFICACIONES.md`).
 
 Todo el código y la documentación fueron revisados y entendidos por el grupo. Los resultados
 esperados de los tests y las verificaciones se calcularon a mano sobre nuestro grafo.
