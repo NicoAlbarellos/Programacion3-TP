@@ -25,6 +25,12 @@ import java.util.Map;
 @RequestMapping("/api/grafo")
 public class GrafoController {
 
+    /**
+     * El dominio (calles de CABA a pie) es NO dirigido: cada calle se guarda
+     * una vez y se recorre en ambos sentidos.
+     */
+    private static final boolean DIRIGIDO = false;
+
     private final GrafoService grafoService;
     private final Recorridos recorridos;
     private final CaminosMinimos caminosMinimos;
@@ -45,8 +51,8 @@ public class GrafoController {
 
     /** Metadatos del grafo cargado. Sirve para verificar la conexion a la base. */
     @GetMapping("/resumen")
-    public Map<String, Object> resumen(@RequestParam(defaultValue = "true") boolean dirigido) {
-        Grafo g = grafoService.cargar(dirigido);
+    public Map<String, Object> resumen() {
+        Grafo g = grafoService.cargar(DIRIGIDO);
         return Map.of(
                 "vertices", g.cantidadVertices(),
                 "aristas", g.cantidadAristas(),
@@ -54,55 +60,62 @@ public class GrafoController {
                 "ids", g.ids());
     }
 
-    /** GET /api/grafo/dfs?origen=A */
+    /** GET /api/grafo/dfs?origen=RET */
     @GetMapping("/dfs")
     public List<String> dfs(@RequestParam String origen) {
-        return recorridos.dfs(grafoService.cargar(true), origen);
+        return recorridos.dfs(grafoService.cargar(DIRIGIDO), origen);
     }
 
-    /** GET /api/grafo/bfs?origen=A */
+    /** GET /api/grafo/bfs?origen=RET */
     @GetMapping("/bfs")
     public List<String> bfs(@RequestParam String origen) {
-        return recorridos.bfs(grafoService.cargar(true), origen);
+        return recorridos.bfs(grafoService.cargar(DIRIGIDO), origen);
     }
 
-    /** GET /api/grafo/dijkstra?origen=A&destino=H */
+    /** GET /api/grafo/dijkstra?origen=RET&destino=CUN */
     @GetMapping("/dijkstra")
     public CaminosMinimos.Camino dijkstra(@RequestParam String origen, @RequestParam String destino) {
-        return caminosMinimos.dijkstra(grafoService.cargar(true), origen, destino);
+        return caminosMinimos.dijkstra(grafoService.cargar(DIRIGIDO), origen, destino);
     }
 
     /** GET /api/grafo/floyd */
     @GetMapping("/floyd")
     public Map<String, Double> floyd() {
-        return caminosMinimos.floydWarshall(grafoService.cargar(true));
+        return caminosMinimos.floydWarshall(grafoService.cargar(DIRIGIDO));
     }
 
-    /** GET /api/grafo/ucs?origen=A&destino=H */
+    /** GET /api/grafo/ucs?origen=RET&destino=CUN */
     @GetMapping("/ucs")
     public CaminosMinimos.Camino ucs(@RequestParam String origen, @RequestParam String destino) {
-        return caminosMinimos.ucs(grafoService.cargar(true), origen, destino);
+        return caminosMinimos.ucs(grafoService.cargar(DIRIGIDO), origen, destino);
     }
 
-    /** GET /api/grafo/prim?origen=A   (el MST exige grafo NO dirigido) */
+    /**
+     * GET /api/grafo/prim?origen=RET
+     * El arbol de recubrimiento minimo exige SIEMPRE grafo no dirigido:
+     * se carga con false sin importar el valor de DIRIGIDO.
+     */
     @GetMapping("/prim")
     public ArbolRecubrimiento.Mst prim(@RequestParam String origen) {
         return arbolRecubrimiento.prim(grafoService.cargar(false), origen);
     }
 
-    /** GET /api/grafo/kruskal */
+    /**
+     * GET /api/grafo/kruskal
+     * Igual que Prim: el MST exige SIEMPRE grafo no dirigido, sin importar DIRIGIDO.
+     */
     @GetMapping("/kruskal")
     public ArbolRecubrimiento.Mst kruskal() {
         return arbolRecubrimiento.kruskal(grafoService.cargar(false));
     }
 
-    /** GET /api/grafo/rutas?origen=A&destino=H&costoMaximo=30&saltosMaximos=5 */
+    /** GET /api/grafo/rutas?origen=RET&destino=CUN&costoMaximo=150&saltosMaximos=4 */
     @GetMapping("/rutas")
     public List<Backtracking.Ruta> rutas(@RequestParam String origen,
                                          @RequestParam String destino,
                                          @RequestParam(defaultValue = "1000") double costoMaximo,
                                          @RequestParam(defaultValue = "10") int saltosMaximos) {
-        return backtracking.rutasSimples(grafoService.cargar(true), origen, destino,
+        return backtracking.rutasSimples(grafoService.cargar(DIRIGIDO), origen, destino,
                 costoMaximo, saltosMaximos);
     }
 }

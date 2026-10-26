@@ -1,28 +1,31 @@
-### Verificar conexión y datos
+### Verificar conexión y datos    (esperado: 12 vértices, 21 aristas, no dirigido)
 GET http://localhost:8080/api/grafo/resumen
 
-### Recorridos
-GET http://localhost:8080/api/grafo/dfs?origen=A
-GET http://localhost:8080/api/grafo/bfs?origen=A
+### Recorridos    (refugios alcanzables desde Retiro)
+GET http://localhost:8080/api/grafo/bfs?origen=RET
+GET http://localhost:8080/api/grafo/dfs?origen=RET
 
-### Caminos mínimos    (esperado: A->C = 7, A->H = 20)
-GET http://localhost:8080/api/grafo/dijkstra?origen=A&destino=C
-GET http://localhost:8080/api/grafo/dijkstra?origen=A&destino=H
+### Error controlado    (esperado: 400 con JSON)
+GET http://localhost:8080/api/grafo/bfs?origen=XXX
+
+### Caminos mínimos    (esperado: PAL->CUN = 84 por MON, no 90 directo)
+GET http://localhost:8080/api/grafo/dijkstra?origen=PAL&destino=CUN
+GET http://localhost:8080/api/grafo/dijkstra?origen=RET&destino=CUN
 GET http://localhost:8080/api/grafo/floyd
-GET http://localhost:8080/api/grafo/ucs?origen=A&destino=H
+GET http://localhost:8080/api/grafo/ucs?origen=RET&destino=CUN
 
-### Arbol de recubrimiento minimo    (esperado: 7 aristas, costo total 27)
-GET http://localhost:8080/api/grafo/prim?origen=A
+### Árbol de recubrimiento mínimo    (esperado: 11 aristas, costo total 287)
+GET http://localhost:8080/api/grafo/prim?origen=RET
 GET http://localhost:8080/api/grafo/kruskal
 
-### Ordenamiento
+### Ordenamiento de suministros
 GET http://localhost:8080/api/seleccion/quicksort?criterio=ratio
 GET http://localhost:8080/api/seleccion/mergesort?criterio=peso
 
-### Seleccion    (comparar: greedy no deberia igualar a dinamica)
-GET http://localhost:8080/api/seleccion/greedy?capacidad=10
-GET http://localhost:8080/api/seleccion/dinamica?capacidad=10
+### Mochila de 12 kg    (esperado: greedy 112, dinámica 119)
+GET http://localhost:8080/api/seleccion/greedy?capacidad=12
+GET http://localhost:8080/api/seleccion/dinamica?capacidad=12
 
 ### Backtracking y Branch and Bound
-GET http://localhost:8080/api/grafo/rutas?origen=A&destino=H&costoMaximo=30&saltosMaximos=6
+GET http://localhost:8080/api/grafo/rutas?origen=RET&destino=CUN&costoMaximo=150&saltosMaximos=4
 GET http://localhost:8080/api/seleccion/repartir?contenedores=3

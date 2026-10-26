@@ -14,9 +14,10 @@ import java.util.Optional;
  * materia el foco esta en los algoritmos, y mezclar Mono/Flux agrega
  * complejidad que no aporta nada al objetivo de aprendizaje.
  *
- * findAll() ya trae cada Nodo con su lista de conexiones cargada, porque
- * Conexion esta mapeada con @Relationship en la entidad. No hace falta
- * ninguna consulta Cypher extra para armar el grafo.
+ * Lo usa la carga inicial para guardar los nodos con sus conexiones.
+ * Para ARMAR el grafo en memoria GrafoService no usa findAll() (no garantiza
+ * orden): hace consultas Cypher ordenadas por id para que la carga sea
+ * determinista.
  */
 @Repository
 public interface NodoRepository extends Neo4jRepository<Nodo, String> {
