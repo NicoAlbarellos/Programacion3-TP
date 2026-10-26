@@ -84,6 +84,18 @@ public class GrafoController {
         return caminosMinimos.floydWarshall(grafoService.cargar(DIRIGIDO));
     }
 
+    /** GET /api/grafo/floyd/camino?origen=PAL&destino=CUN */
+    @GetMapping("/floyd/camino")
+    public CaminosMinimos.Camino caminoFloyd(@RequestParam String origen, @RequestParam String destino) {
+        return caminosMinimos.caminoFloyd(grafoService.cargar(DIRIGIDO), origen, destino);
+    }
+
+    /** GET /api/grafo/floyd/comparacion : trabajo de Floyd contra Dijkstra desde cada vertice. */
+    @GetMapping("/floyd/comparacion")
+    public CaminosMinimos.Comparacion floydComparacion() {
+        return caminosMinimos.compararConDijkstra(grafoService.cargar(DIRIGIDO));
+    }
+
     /** GET /api/grafo/ucs?origen=RET&destino=CUN */
     @GetMapping("/ucs")
     public CaminosMinimos.Camino ucs(@RequestParam String origen, @RequestParam String destino) {
