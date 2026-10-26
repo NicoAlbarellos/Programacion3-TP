@@ -29,7 +29,15 @@ public final class GrafosDePrueba {
 
     /** Semilla original de la catedra (A..H, 12 aristas). Dirigido. */
     public static Grafo semillaCatedra() {
-        Grafo g = new Grafo(true);
+        return semillaCatedra(true);
+    }
+
+    /**
+     * Semilla de la catedra, dirigida o no. La no dirigida es la que pide el MST
+     * (7 aristas, costo 27 segun la clase 5).
+     */
+    public static Grafo semillaCatedra(boolean dirigido) {
+        Grafo g = new Grafo(dirigido);
         g.agregarArista("A", "B", 4);
         g.agregarArista("A", "C", 9);
         g.agregarArista("B", "C", 3);
