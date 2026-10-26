@@ -13,7 +13,7 @@ Hecho sobre el scaffold de la cátedra (Spring Boot + Neo4j).
 |---|---|
 | Nicolás Albarellos | [NicoAlbarellos](https://github.com/NicoAlbarellos) |
 | Juan Manuel Portnoy | [jmportnoy](https://github.com/jmportnoy) | |
-| Exequiel Campbell | **_PENDIENTE: completar usuario de GitHub_** |
+| Exequiel Campbell | [ExeCampbell](https://github.com/ExeCampbell) |
 
 ---
 
