@@ -14,6 +14,8 @@ alcanzado. En **negrita**, los vértices ya extraídos (su valor es definitivo).
 1. [Dijkstra desde PAL](#1-dijkstra-desde-pal)
 2. [Kruskal](#2-kruskal)
 3. [Prim desde RET](#3-prim-desde-ret)
+4. [Greedy vs. mochila 0/1 con PD](#4-greedy-vs-mochila-01-con-pd)
+5. [Floyd-Warshall](#5-floyd-warshall)
 
 ---
 
@@ -195,3 +197,259 @@ RET→REC, PMA→OBE, OBE→ABA, ABA→HIT, HIT→PCE, HIT→PAL, PMA→CON, CON
 aceptó Kruskal (en otro orden), como corresponde a un MST único. El test
 `primDominioDaElMismoArbolDesdeOtroOrigen` comprueba además que arrancando desde CUN se obtiene el
 mismo conjunto de calles.
+
+---
+
+## 4. Greedy vs. mochila 0/1 con PD
+
+Lo pide el hito 6: **un juego de datos donde el greedy NO da el óptimo** y la mochila 0/1 con PD sí.
+Datos: los 8 suministros del dominio (README). Consultas:
+`GET /api/seleccion/greedy?capacidad=12`, `/dinamica?capacidad=12` y `/comparar?capacidad=12`.
+
+### 4.1 Ratios utilidad/peso, ordenados de mayor a menor
+
+| Orden | Id | Suministro | kg | Utilidad | Ratio |
+|---|---|---|---|---|---|
+| 1 | S1 | Botiquín | 3 | 50 | 16,67 |
+| 2 | S2 | Comida enlatada | 4 | 40 | 10,00 |
+| 3 | S4 | Linterna | 1 | 8 | 8,00 |
+| 4 | S3 | Agua 7L | 7 | 55 | 7,86 |
+| 5 | S5 | Radio | 2 | 14 | 7,00 |
+| 6 | S7 | Bolsa de dormir | 6 | 30 | 5,00 |
+| 7 | S8 | Herramientas | 5 | 24 | 4,80 |
+| 8 | S6 | Bate | 5 | 10 | 2,00 |
+
+Es el mismo orden que devuelve `GET /api/seleccion/mergesort?criterio=ratio&orden=desc`.
+
+### 4.2 Capacidad 12: traza del greedy y solución óptima
+
+**Greedy por ratio** (si entra se toma; si no entra se **saltea** y se sigue):
+
+| Paso | Suministro | kg | ¿Entra en lo que queda? | Decisión | kg usados | Libres | Utilidad acumulada |
+|---|---|---|---|---|---|---|---|
+| 1 | S1 | 3 | 3 ≤ 12 | Toma | 3 | 9 | 50 |
+| 2 | S2 | 4 | 4 ≤ 9 | Toma | 7 | 5 | 90 |
+| 3 | S4 | 1 | 1 ≤ 5 | Toma | 8 | 4 | 98 |
+| 4 | S3 | 7 | 7 > 4 | **Saltea** | 8 | 4 | 98 |
+| 5 | S5 | 2 | 2 ≤ 4 | Toma | 10 | 2 | 112 |
+| 6 | S7 | 6 | 6 > 2 | Saltea | 10 | 2 | 112 |
+| 7 | S8 | 5 | 5 > 2 | Saltea | 10 | 2 | 112 |
+| 8 | S6 | 5 | 5 > 2 | Saltea | 10 | 2 | 112 |
+
+**Greedy = {S1, S2, S4, S5}: 112 de utilidad, 10 kg.** (Si cortara en el paso 4 en vez de saltear,
+daría 98.)
+
+**Óptimo (PD) = {S1, S3, S5}: 50 + 55 + 14 = 119 de utilidad, 3 + 7 + 2 = 12 kg.**
+
+Salida real (resumida):
+
+```
+GET /api/seleccion/comparar?capacidad=12
+greedy:   S1, S2, S4, S5   valorTotal 112.0   pesoTotal 10.0
+dinamica: S1, S3, S5       valorTotal 119.0   pesoTotal 12.0
+```
+
+**Por qué el greedy pierde.** Los dos toman S1 y S5. La diferencia es qué hacen con los 7 kg
+restantes: el greedy, mirando solo el ratio, los llena con S2 + S4 (5 kg, 48 de utilidad) y después
+**ya no le entra** S3 (7 kg) en los 4 kg libres, así que terminan sobrando 2 kg. El óptimo usa esos
+7 kg enteros con S3 (55 de utilidad), aunque su ratio (7,86) sea menor que el de S2 y S4. Con ítems
+indivisibles, la elección localmente mejor (mayor ratio) puede dejar capacidad que después no se
+aprovecha, y el greedy no vuelve atrás para corregirlo. La PD, en cambio, evalúa para cada
+capacidad j las dos opciones (tomar o no cada ítem) y se queda con la mejor.
+
+Comparación con la **mochila fraccional** (clase 3): con 12 kg tomaría S1, S2, S4 (8 kg, 98) y 4/7
+de S3 (31,43): 129,43. Ahí el greedy por ratio es óptimo, y ese valor es una **cota superior** del
+óptimo 0/1 (119 ≤ 129,43).
+
+Lo verifica `SeleccionTest.capacidadDoceGreedyNoEsOptimo`.
+
+**Tabla dp del dominio con capacidad 12** (ítems en el orden de entrada, por id; fila i = "usando
+S1..Si"):
+
+| i (se agrega) | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 0 (ninguno) | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| 1 (S1 3/50) | 0 | 0 | 0 | 50 | 50 | 50 | 50 | 50 | 50 | 50 | 50 | 50 | 50 |
+| 2 (S2 4/40) | 0 | 0 | 0 | 50 | 50 | 50 | 50 | 90 | 90 | 90 | 90 | 90 | 90 |
+| 3 (S3 7/55) | 0 | 0 | 0 | 50 | 50 | 50 | 50 | 90 | 90 | 90 | 105 | 105 | 105 |
+| 4 (S4 1/8) | 0 | 8 | 8 | 50 | 58 | 58 | 58 | 90 | 98 | 98 | 105 | 113 | 113 |
+| 5 (S5 2/14) | 0 | 8 | 14 | 50 | 58 | 64 | 72 | 90 | 98 | 104 | 112 | 113 | **119** |
+| 6 (S6 5/10) | 0 | 8 | 14 | 50 | 58 | 64 | 72 | 90 | 98 | 104 | 112 | 113 | 119 |
+| 7 (S7 6/30) | 0 | 8 | 14 | 50 | 58 | 64 | 72 | 90 | 98 | 104 | 112 | 113 | 119 |
+| 8 (S8 5/24) | 0 | 8 | 14 | 50 | 58 | 64 | 72 | 90 | 98 | 104 | 112 | 113 | **119** |
+
+Celda clave: dp[5][12] = max(dp[4][12], dp[4][10] + 14) = max(113, 105 + 14) = 119.
+
+Recuperación desde dp[8][12] = 119:
+
+| i | j | dp[i][j] | dp[i−1][j] | ¿Distintos? | Decisión | j siguiente |
+|---|---|---|---|---|---|---|
+| 8 (S8) | 12 | 119 | 119 | no | no se toma | 12 |
+| 7 (S7) | 12 | 119 | 119 | no | no se toma | 12 |
+| 6 (S6) | 12 | 119 | 119 | no | no se toma | 12 |
+| 5 (S5) | 12 | 119 | 113 | **sí** | **toma S5** | 12 − 2 = 10 |
+| 4 (S4) | 10 | 105 | 105 | no | no se toma | 10 |
+| 3 (S3) | 10 | 105 | 90 | **sí** | **toma S3** | 10 − 7 = 3 |
+| 2 (S2) | 3 | 50 | 50 | no | no se toma | 3 |
+| 1 (S1) | 3 | 50 | 0 | **sí** | **toma S1** | 3 − 3 = 0 |
+
+Resultado: {S1, S3, S5}, 119, igual que el endpoint.
+
+### 4.3 Tabla dp a mano: ejemplo de la clase 6
+
+Ejemplo chico para dibujar en el pizarrón: fichajes con presupuesto 8 (costo = peso,
+rendimiento = valor). J1 5/60, J2 3/50, J3 4/70.
+
+dp[i][j] = mejor rendimiento con los jugadores 1..i y presupuesto j.
+
+| i (se agrega) | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
+|---|---|---|---|---|---|---|---|---|---|
+| 0 (ninguno) | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| 1 (J1 5/60) | 0 | 0 | 0 | 0 | 0 | 60 | 60 | 60 | 60 |
+| 2 (J2 3/50) | 0 | 0 | 0 | 50 | 50 | 60 | 60 | 60 | 110 |
+| 3 (J3 4/70) | 0 | 0 | 0 | 50 | 70 | 70 | 70 | 120 | **120** |
+
+Cómo se llenan algunas celdas:
+- Fila 1: J1 cuesta 5; hasta j = 4 no entra (0), desde j = 5 vale 60.
+- dp[2][3] = max(dp[1][3], dp[1][0] + 50) = max(0, 50) = 50: conviene J2 solo.
+- dp[2][8] = max(dp[1][8], dp[1][5] + 50) = max(60, 110) = 110: J1 + J2.
+- dp[3][4] = max(dp[2][4], dp[2][0] + 70) = max(50, 70) = 70.
+- dp[3][7] = max(dp[2][7], dp[2][3] + 70) = max(60, 120) = 120.
+- dp[3][8] = max(dp[2][8], dp[2][4] + 70) = max(110, 120) = 120.
+
+Recuperación desde dp[3][8] = 120:
+
+| i | j | dp[i][j] | dp[i−1][j] | Decisión | j siguiente |
+|---|---|---|---|---|---|
+| 3 (J3) | 8 | 120 | 110 | distintos → **toma J3** | 8 − 4 = 4 |
+| 2 (J2) | 4 | 50 | 0 | distintos → **toma J2** | 4 − 3 = 1 |
+| 1 (J1) | 1 | 0 | 0 | iguales → no se toma | — |
+
+**Resultado: {J2, J3}, rendimiento 120, costo 7.** Coincide con la diapositiva y con
+`SeleccionTest.fichajesClaseSeisCasoDondeAcierta`. Acá el greedy por ratio (J3 17,5 > J2 16,7 >
+J1 12) también da 120: es el "caso donde acierta".
+
+**Nota sobre el "caso donde falla" de la diapositiva** (J1 5/60, J2 3/50, J3 6/90, presupuesto 8).
+La diapositiva dice "greedy por ratio" y toma primero J3 (ratio 15,0) obteniendo 90, pero J2 tiene
+ratio 16,7 > 15,0. Ordenando bien por ratio (J2 16,7 > J3 15,0 > J1 12,0): toma J2 (3), J3 (6) no
+entra en los 5 libres y se saltea, J1 (5) entra → **110**, que es el óptimo. El 90 de la diapositiva
+es lo que da el greedy **por valor** (J3 90 primero; después ni J1 ni J2 entran en los 2 libres). Lo
+verifica `SeleccionTest.fichajesClaseSeisCasoDondeFallaSegunLaDiapositiva`: por valor 90 {J3}, por
+ratio 110 {J1, J2}. Por eso nuestro contraejemplo para el greedy por ratio es el de la sección 4.2.
+
+### 4.4 Resumen greedy vs. PD por capacidad
+
+Suministros del dominio, greedy por ratio descendente. Valores de `SeleccionTest`.
+
+| Capacidad (kg) | Greedy | Elegidos greedy | PD (óptimo) | Elegidos PD | ¿Greedy óptimo? |
+|---|---|---|---|---|---|
+| 0 | 0 | — | 0 | — | Sí |
+| 2 | 8 | S4 | 14 | S5 | **No** (pierde 6) |
+| 5 | 58 | S1, S4 | 64 | S1, S5 | **No** (pierde 6) |
+| 8 | 98 | S1, S2, S4 | 98 | S1, S2, S4 | Sí |
+| 10 | 112 | S1, S2, S4, S5 | 112 | S1, S2, S4, S5 | Sí |
+| 12 | 112 | S1, S2, S4, S5 | **119** | S1, S3, S5 | **No** (pierde 7) |
+| 15 | 153 | S1, S2, S3, S4 | 153 | S1, S2, S3, S4 | Sí |
+| 20 | 167 | S1, S2, S3, S4, S5 | 177 | S1, S2, S3, S4, S8 | **No** (pierde 10) |
+| 33 | 231 | los 8 | 231 | los 8 | Sí (entra todo) |
+
+Lecturas:
+- **Capacidad 2:** el greedy toma S4 (1 kg, ratio 8) y ya no le entra S5 (2 kg); el óptimo es S5
+  solo (14). Es el ejemplo mínimo de que el mejor ratio no siempre es la mejor elección.
+- **Capacidad 20:** al greedy le sobran 3 kg (usa 17); el óptimo cambia S5 (2 kg, 14) por S8 (5 kg,
+  24) y usa los 20.
+- Con capacidad ≥ 33 (suma de pesos) entra todo; la PD acota W a 33 y da lo mismo (test
+  `capacidadIgualOMayorALaSumaTomaTodo`, con 33 y con 40).
+
+---
+
+## 5. Floyd-Warshall
+
+Consultas: `GET /api/grafo/floyd`, `/floyd/camino` y `/floyd/comparacion`.
+
+### 5.1 Matriz de tiempos mínimos (minutos a pie)
+
+Fila = origen, columna = destino. Simétrica porque el grafo es no dirigido; diagonal en 0.
+
+| | ABA | CON | CUN | HIT | LBO | MON | OBE | PAL | PCE | PMA | REC | RET |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| **ABA** | 0 | 36 | 124 | 19 | 65 | 106 | 28 | 40 | 30 | 48 | 29 | 49 |
+| **CON** | 36 | 0 | 160 | 55 | 29 | 142 | 31 | 76 | 66 | 30 | 56 | 48 |
+| **CUN** | 124 | 160 | 0 | 105 | 183 | 18 | 139 | 84 | 123 | 147 | 114 | 129 |
+| **HIT** | 19 | 55 | 105 | 0 | 84 | 87 | 47 | 21 | 18 | 67 | 48 | 66 |
+| **LBO** | 65 | 29 | 183 | 84 | 0 | 165 | 56 | 99 | 95 | 36 | 74 | 54 |
+| **MON** | 106 | 142 | 18 | 87 | 165 | 0 | 121 | 66 | 105 | 129 | 96 | 111 |
+| **OBE** | 28 | 31 | 139 | 47 | 56 | 121 | 0 | 55 | 58 | 20 | 25 | 22 |
+| **PAL** | 40 | 76 | 84 | 21 | 99 | 66 | 55 | 0 | 39 | 63 | 30 | 45 |
+| **PCE** | 30 | 66 | 123 | 18 | 95 | 105 | 58 | 39 | 0 | 78 | 59 | 79 |
+| **PMA** | 48 | 30 | 147 | 67 | 36 | 129 | 20 | 63 | 78 | 0 | 38 | 18 |
+| **REC** | 29 | 56 | 114 | 48 | 74 | 96 | 25 | 30 | 59 | 38 | 0 | 20 |
+| **RET** | 49 | 48 | 129 | 66 | 54 | 111 | 22 | 45 | 79 | 18 | 20 | 0 |
+
+Suma de las 144 celdas: **9206**, igual que `FloydWarshallTest.sumaDeTodasLasDistancias`. La salida
+real de `/floyd` coincide en los pares consultados (`ABA->ABA` 0, `ABA->CON` 36, `ABA->CUN` 124,
+`PAL->CUN` 84, `RET->CUN` 129, `LBO->CUN` 183).
+
+### 5.2 Comparación con Dijkstra (algunos pares)
+
+| Par | Floyd | Dijkstra (camino) | Coincide |
+|---|---|---|---|
+| PAL → CUN | 84 | PAL – MON – CUN = 66 + 18 (no la directa de 90) | Sí |
+| RET → CUN | 129 | RET – PAL – MON – CUN = 45 + 66 + 18 | Sí |
+| LBO → CUN | 183 | LBO – PMA – RET – PAL – MON – CUN = 36 + 18 + 45 + 66 + 18 | Sí |
+| LBO → MON / MON → LBO | 165 / 165 | simétrico (no dirigido) | Sí |
+| CON → PCE | 66 | CON – ABA – PCE = 36 + 30 | Sí |
+| PCE → PMA | 78 | PCE – ABA – OBE – PMA = 30 + 28 + 20 | Sí |
+
+La fila **PAL** de la matriz es exactamente la última fila de la tabla de Dijkstra desde PAL de la
+[sección 1](#1-dijkstra-desde-pal) (HIT 21, REC 30, PCE 39, ABA 40, RET 45, OBE 55, PMA 63, MON 66,
+CON 76, CUN 84, LBO 99).
+
+Para los **144 pares**, `FloydWarshallTest.coincideConDijkstraEnTodosLosPares` compara los costos y
+`caminoFloydIgualADijkstraEnTodosLosPares` compara además los vértices del camino reconstruido por
+`/floyd/camino` (en el dominio no hay caminos mínimos empatados). Salidas reales de `/floyd/camino`:
+PAL → CUN `["PAL","MON","CUN"]` 84.0 y LBO → CUN `["LBO","PMA","RET","PAL","MON","CUN"]` 183.0,
+iguales a las de `/dijkstra`.
+
+**Cómo llega Floyd a PAL → CUN = 84** (el orden de k es el de los índices: ABA, CON, CUN, HIT, LBO,
+MON, …): al empezar d[PAL][CUN] = 90 (calle directa) y siguiente[PAL][CUN] = CUN. Ningún intermedio
+anterior a MON mejora ese par. Con k = MON: d[PAL][MON] + d[MON][CUN] = 66 + 18 = 84 < 90, entonces
+d[PAL][CUN] = 84 y siguiente[PAL][CUN] = siguiente[PAL][MON] = MON. Reconstrucción: PAL →
+siguiente[PAL][CUN] = MON → siguiente[MON][CUN] = CUN.
+
+### 5.3 Trabajo: Floyd vs. Dijkstra V veces
+
+```
+GET /api/grafo/floyd/comparacion
+{"vertices":12,"operacionesFloyd":1728,"nodosExpandidosDijkstra":144,"aristasExaminadasDijkstra":504}
+```
+
+| Métrica | Cálculo a mano | Valor |
+|---|---|---|
+| Relajaciones de Floyd | V³ = 12³ | 1728 |
+| Nodos expandidos por Dijkstra (12 corridas) | V corridas × V nodos (grafo conexo) | 144 |
+| Aristas examinadas por Dijkstra (12 corridas) | V corridas × 2E = 12 × 42 | 504 |
+
+El análisis (grafo disperso vs. denso) está en la ficha de
+[`/floyd/comparacion`](ENDPOINTS.md#get-apigrafofloydcomparacion).
+
+### 5.4 Ciclo negativo (tests)
+
+Con los datos del dominio no hay costos negativos, así que se verifica con grafos de prueba en
+`FloydWarshallTest`:
+
+| Test | Grafo | Resultado esperado |
+|---|---|---|
+| `cicloNegativoDirigidoFalla` | Dirigido: A → B = 1, B → C = −3, C → A = 1 | Ciclo A → B → C → A = 1 − 3 + 1 = −1: la diagonal queda negativa → `Hay un ciclo de costo negativo` (422 en la API). |
+| `aristaNegativaNoDirigidaEsCicloNegativo` | No dirigido: A – B = 2, B – C = −1 | B → C → B = −2: una calle negativa ya es un ciclo negativo → falla. |
+| `aristaNegativaSinCicloSeAcepta` | Dirigido: A → B = 1, B → C = −2, A → C = 3 | Sin ciclos: `A->C` = 1 − 2 = **−1** (mejor que el directo 3), `A->B` = 1 y `B->A` **no aparece** (inalcanzable). Dijkstra rechazaría este grafo. |
+| `caminoConCicloNegativoFalla` | Dirigido: A → B = 1, B → A = −3 | `/floyd/camino` también falla (A → B → A = −2). |
+| `caminoInalcanzableFalla` | Dirigido: A → B = 1 | Camino de B a A: `No hay camino de B a A` (422). |
+
+Traza de `cicloNegativoDirigidoFalla` (orden de k: A, B, C). Inicial: d[A][B] = 1, d[B][C] = −3,
+d[C][A] = 1, diagonal 0, el resto ∞.
+- k = A: d[C][B] = d[C][A] + d[A][B] = 1 + 1 = 2.
+- k = B: d[A][C] = d[A][B] + d[B][C] = 1 − 3 = −2 y d[C][C] = d[C][B] + d[B][C] = 2 − 3 = **−1**.
+- k = C: d[A][A] = d[A][C] + d[C][A] = −2 + 1 = **−1** (y d[B][B] = −3 + 2 = −1).
+
+Al terminar hay valores negativos en la diagonal → ciclo negativo detectado.

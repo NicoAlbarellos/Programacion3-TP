@@ -12,6 +12,8 @@ GET http://localhost:8080/api/grafo/bfs?origen=XXX
 GET http://localhost:8080/api/grafo/dijkstra?origen=PAL&destino=CUN
 GET http://localhost:8080/api/grafo/dijkstra?origen=RET&destino=CUN
 GET http://localhost:8080/api/grafo/floyd
+GET http://localhost:8080/api/grafo/floyd/camino?origen=LBO&destino=CUN
+GET http://localhost:8080/api/grafo/floyd/comparacion
 GET http://localhost:8080/api/grafo/ucs?origen=RET&destino=CUN
 
 ### Árbol de recubrimiento mínimo    (esperado: 11 aristas, costo total 287)
@@ -25,6 +27,7 @@ GET http://localhost:8080/api/seleccion/mergesort?criterio=peso
 ### Mochila de 12 kg    (esperado: greedy 112, dinámica 119)
 GET http://localhost:8080/api/seleccion/greedy?capacidad=12
 GET http://localhost:8080/api/seleccion/dinamica?capacidad=12
+GET http://localhost:8080/api/seleccion/comparar?capacidad=12
 
 ### Backtracking y Branch and Bound
 GET http://localhost:8080/api/grafo/rutas?origen=RET&destino=CUN&costoMaximo=150&saltosMaximos=4

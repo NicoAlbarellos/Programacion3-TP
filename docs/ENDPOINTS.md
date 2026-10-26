@@ -8,7 +8,9 @@ grafo V = 12 y E = 21. El costo de una arista son **minutos a pie**.
 
 Los ejemplos se obtuvieron corriendo la aplicación contra Neo4j con la carga inicial
 (`seed/CargaInicial.java`), salvo donde la ficha indica otra cosa. Los cálculos a mano que
-verifican Dijkstra, Prim y Kruskal están en [`VERIFICACIONES.md`](VERIFICACIONES.md).
+verifican Dijkstra, Prim, Kruskal, greedy vs. PD y Floyd están en
+[`VERIFICACIONES.md`](VERIFICACIONES.md). La tabla resumen de complejidades está en
+[`COMPLEJIDADES.md`](COMPLEJIDADES.md).
 
 ## Índice
 
@@ -16,10 +18,16 @@ verifican Dijkstra, Prim y Kruskal están en [`VERIFICACIONES.md`](VERIFICACIONE
 - [GET /api/grafo/bfs](#get-apigrafobfs) — BFS
 - [GET /api/grafo/dfs](#get-apigrafodfs) — DFS
 - [GET /api/grafo/dijkstra](#get-apigrafodijkstra) — Dijkstra
+- [GET /api/grafo/floyd](#get-apigrafofloyd) — Floyd-Warshall
+- [GET /api/grafo/floyd/camino](#get-apigrafofloydcamino) — Floyd con reconstrucción del camino
+- [GET /api/grafo/floyd/comparacion](#get-apigrafofloydcomparacion) — Floyd vs. Dijkstra V veces
 - [GET /api/grafo/prim](#get-apigrafoprim) — Prim
 - [GET /api/grafo/kruskal](#get-apigrafokruskal) — Kruskal (Union-Find)
 - [GET /api/seleccion/quicksort](#get-apiseleccionquicksort) — QuickSort
 - [GET /api/seleccion/mergesort](#get-apiseleccionmergesort) — MergeSort
+- [GET /api/seleccion/greedy](#get-apiselecciongreedy) — Greedy (mochila 0/1 por ratio)
+- [GET /api/seleccion/dinamica](#get-apiselecciondinamica) — Mochila 0/1 con programación dinámica
+- [GET /api/seleccion/comparar](#get-apiseleccioncomparar) — Greedy vs. PD sobre la misma mochila
 - [Errores](#errores)
 - [Pendientes](#pendientes)
 
@@ -332,6 +340,259 @@ E + 1 entradas) y el camino reconstruido (≤ V).
   `previo[]` guarda el árbol de caminos mínimos; el camino se reconstruye recorriéndolo desde el
   destino hacia atrás (insertando al principio de un `ArrayDeque`, O(1) por paso).
 - **Lista de adyacencia**: relajar los vecinos de u cuesta O(grado(u)).
+
+---
+
+## GET /api/grafo/floyd
+
+**Caminos mínimos entre todos los pares con Floyd-Warshall** (programación dinámica sobre grafos).
+En el dominio: la **tabla de tiempos mínimos a pie entre todos los lugares**, la que un grupo de
+sobrevivientes pegaría en la pared del refugio para no recalcular cada ruta.
+
+Implementación: `CaminosMinimos.floydWarshall` (`algorithm/CaminosMinimos.java`).
+
+**Parámetros:** ninguno. El grafo se carga con `DIRIGIDO = false`.
+
+**Respuesta:** un objeto `"origen->destino": minutos` con un par por clave, en orden de índices
+(origen por id y, dentro de cada origen, destino por id). Los pares **inalcanzables se omiten**: si
+una clave no está, no hay camino. La diagonal (`X->X`) vale 0.
+
+**Ejemplo** (extracto: la respuesta tiene 144 claves = 12 × 12, porque el grafo es conexo)
+
+```
+GET /api/grafo/floyd
+```
+
+```json
+{"ABA->ABA":0.0,"ABA->CON":36.0,"ABA->CUN":124.0, ... ,"PAL->CUN":84.0, ... ,"LBO->CUN":183.0, ... ,"RET->CUN":129.0, ...}
+```
+
+- `PAL->CUN` = 84: igual que Dijkstra, pasa por MON (66 + 18) y no usa la calle directa de 90.
+- `RET->CUN` = 129 (RET – PAL – MON – CUN) y `LBO->CUN` = 183 (LBO – PMA – RET – PAL – MON – CUN),
+  el par más lejano del grafo.
+- La suma de los 144 valores es 9206 (lo verifica `FloydWarshallTest.sumaDeTodasLasDistancias`).
+  La matriz completa está en [`VERIFICACIONES.md`](VERIFICACIONES.md#5-floyd-warshall).
+
+**Errores**
+
+| Situación | Código | `detalle` |
+|---|---|---|
+| Hay un ciclo de costo negativo | 422 | `Hay un ciclo de costo negativo` |
+
+Con los datos del dominio no ocurre (todos los costos son minutos a pie, positivos); está cubierto
+por `FloydWarshallTest.cicloNegativoDirigidoFalla` y `aristaNegativaNoDirigidaEsCicloNegativo`.
+
+**Cómo funciona.** Se parte de la **matriz de adyacencia**: d[i][i] = 0, d[i][j] = costo de la calle
+i – j si existe, ∞ si no. Después, para cada vértice k (el "intermedio permitido"), se recorre toda
+la matriz y se **relaja por k**:
+
+```
+d[i][j] = min(d[i][j], d[i][k] + d[k][j])
+```
+
+**Subproblema de PD.** d_k[i][j] = costo mínimo de i a j usando como intermedios solo los vértices
+0..k. Hay dos opciones: el mejor camino no pasa por k (vale d_(k−1)[i][j]) o pasa por k una vez
+(d_(k−1)[i][k] + d_(k−1)[k][j]). Al terminar con k = V − 1 están permitidos todos los vértices y
+d[i][j] es el camino mínimo.
+
+**¿Por qué k va en el bucle de afuera?** Porque es la dimensión de la PD: para calcular la "capa" k
+hace falta tener **completa** la capa k − 1 para todos los pares. Si k fuera el bucle de adentro,
+d[i][j] se terminaría de calcular (al cerrar su iteración de i, j) mirando intermedios k cuyas
+distancias d[i][k] y d[k][j] todavía no eran definitivas, y nunca se volvería a corregir: el
+resultado podría no ser mínimo.
+
+**Una sola matriz alcanza.** En la iteración k la fila y la columna de k no cambian:
+d[i][k] = min(d[i][k], d[i][k] + d[k][k]) y d[k][k] = 0 (sin ciclos negativos). Entonces sobreescribir
+en el lugar no "contamina" los valores que se usan en esa misma capa.
+
+**Aristas negativas y detección de ciclos negativos.**
+- A diferencia de Dijkstra (que no reconsidera un vértice ya extraído y por eso exige costos ≥ 0),
+  Floyd **acepta aristas negativas** mientras no haya un ciclo negativo: no toma decisiones
+  definitivas, revisa todos los pares en cada capa. Ejemplo dirigido del test
+  `aristaNegativaSinCicloSeAcepta`: A → B = 1, B → C = −2, A → C = 3 da `A->C` = −1.
+- **Detección:** al terminar se mira la **diagonal**. Si algún d[i][i] < 0, existe un camino de i a i
+  que cuesta menos que quedarse quieto, o sea un ciclo negativo, y se responde 422. Con un ciclo
+  negativo el camino mínimo no está definido (se puede dar vueltas y bajar el costo sin límite).
+- En un grafo **no dirigido** una sola calle negativa u – v ya es un ciclo negativo (u → v → u).
+- `∞` es `Double.POSITIVE_INFINITY`: ∞ + (negativo) sigue siendo ∞, así que un par sin camino nunca
+  "mejora" por error.
+
+**Complejidad temporal: O(V³).**
+- Tres bucles anidados de V iteraciones cada uno, con trabajo O(1) adentro (una suma y una
+  comparación sobre la matriz): exactamente V³ relajaciones, **sin importar cuántas aristas haya**.
+  En nuestro grafo, 12³ = 1728 (lo cuenta `/floyd/comparacion`).
+- Armar la matriz cuesta O(V² + E), verificar la diagonal O(V) y armar la respuesta O(V²): no
+  cambian el orden.
+
+**Complejidad espacial: O(V²)**: la matriz de distancias (V × V) y el mapa de respuesta (hasta V²
+pares).
+
+**Estructura usada:**
+- **Matriz de adyacencia** (`double[][]`, la devuelve `Grafo.matrizDeAdyacencia()` como copia
+  nueva): leer y escribir d[i][k], d[k][j] y d[i][j] es O(1) por índice, que es lo que hace que cada
+  paso del triple bucle sea O(1). Con lista de adyacencia, averiguar el costo i – j costaría
+  O(grado(i)). Si hubiera calles paralelas, la matriz conserva la más barata.
+- **`LinkedHashMap`** para la respuesta: mantiene el orden de inserción (por índices), así la salida
+  es siempre la misma.
+- Además se arma la matriz **`siguiente[][]`** (ver `/floyd/camino`); `/floyd` no la usa, pero el
+  triple bucle es el mismo para los tres endpoints de Floyd.
+
+---
+
+## GET /api/grafo/floyd/camino
+
+**Ruta más rápida entre dos lugares calculada con Floyd-Warshall**, reconstruyendo por qué lugares
+pasa. En el dominio responde lo mismo que `/dijkstra`, pero con un algoritmo que también funcionaría
+con costos negativos (sin ciclos negativos).
+
+Implementación: `CaminosMinimos.caminoFloyd` (`algorithm/CaminosMinimos.java`).
+
+**Parámetros**
+
+| Nombre | Tipo | Obligatorio | Significado |
+|---|---|---|---|
+| `origen` | String | sí | Id del lugar de partida (ej. `PAL`). |
+| `destino` | String | sí | Id del lugar de llegada (ej. `CUN`). |
+
+**Respuesta:** el mismo formato que `/dijkstra`: `vertices` (camino en orden) y `costoTotal`
+(minutos).
+
+**Ejemplos**
+
+```
+GET /api/grafo/floyd/camino?origen=PAL&destino=CUN
+```
+
+```json
+{"vertices":["PAL","MON","CUN"],"costoTotal":84.0}
+```
+
+```
+GET /api/grafo/floyd/camino?origen=LBO&destino=CUN
+```
+
+```json
+{"vertices":["LBO","PMA","RET","PAL","MON","CUN"],"costoTotal":183.0}
+```
+
+36 + 18 + 45 + 66 + 18 = 183, el par más lejano del grafo. Los dos coinciden con `/dijkstra`; el
+test `caminoFloydIgualADijkstraEnTodosLosPares` lo comprueba para los 144 pares (costo y vértices:
+en el dominio no hay dos caminos mínimos empatados).
+
+**Errores**
+
+| Situación | Código | `detalle` |
+|---|---|---|
+| `origen` o `destino` inexistente | 400 | `No existe el nodo con id: XXX` |
+| El destino no es alcanzable desde el origen | 422 | `No hay camino de X a Y` |
+| Hay un ciclo de costo negativo | 422 | `Hay un ciclo de costo negativo` |
+
+Los dos 422 no se pueden provocar con los datos del dominio (conexo, costos positivos): los cubren
+`FloydWarshallTest.caminoInalcanzableFalla` y `caminoConCicloNegativoFalla`.
+
+**Cómo se reconstruye el camino: matriz `siguiente[i][j]`** = primer vértice al que hay que ir desde
+i para llegar a j por el camino mínimo.
+- **Inicialización:** `siguiente[i][j] = j` si hay calle i – j (se va directo), `i` en la diagonal y
+  `−1` si no hay calle (todavía no se conoce camino).
+- **Al relajar por k** (cuando d[i][k] + d[k][j] < d[i][j]): `siguiente[i][j] = siguiente[i][k]`. El
+  nuevo camino de i a j pasa por k, así que el primer paso es el mismo que para ir de i a k.
+- **Reconstrucción:** desde u = origen se salta a `siguiente[u][destino]` hasta llegar al destino.
+  Ejemplo PAL → CUN: siguiente[PAL][CUN] = MON (se actualizó al relajar por k = MON, porque
+  66 + 18 < 90), y siguiente[MON][CUN] = CUN (calle directa).
+
+Es la contracara de `previo[]` en Dijkstra: Dijkstra guarda el **anterior** desde un único origen
+(un vector) y reconstruye desde el destino hacia atrás; Floyd guarda el **siguiente** para cada par
+(una matriz) y reconstruye hacia adelante, para cualquier origen.
+
+**Complejidad temporal: O(V³)** del triple bucle (igual que `/floyd`; actualizar `siguiente` es
+O(1) más por relajación) + O(V²) de inicializar `siguiente` + **O(V)** de reconstruir el camino (un
+camino simple tiene a lo sumo V vértices). Total **O(V³)**.
+
+**Complejidad espacial: O(V²)**: la matriz de distancias y la matriz `siguiente`.
+
+**Estructura usada:** **matriz de adyacencia** `double[][]` para las distancias y **matriz
+`int[][] siguiente`**: las dos con acceso O(1) por índice, que es lo que mantiene O(1) cada paso del
+triple bucle y cada salto de la reconstrucción.
+
+**¿Floyd o Dijkstra para una sola consulta?** Para un solo par conviene Dijkstra: O((V + E) log V)
+contra O(V³). Floyd conviene si se van a responder **muchas** consultas (la matriz se calcula una
+vez y después cada camino cuesta O(V)) o si hay aristas negativas. En nuestra API cada request
+recalcula la matriz porque el grafo se carga de nuevo en cada request.
+
+---
+
+## GET /api/grafo/floyd/comparacion
+
+**Floyd contra Dijkstra corrido desde cada vértice.** Los dos resuelven "todos los pares": Floyd en
+una corrida, Dijkstra repitiéndolo V veces (una por origen). El endpoint mide el trabajo de cada uno
+sobre el grafo del dominio.
+
+Implementación: `CaminosMinimos.compararConDijkstra` (`algorithm/CaminosMinimos.java`). Usa el mismo
+triple bucle de `floydWarshall` y el mismo núcleo de `dijkstra` (`arbolDesde`), con contadores.
+
+**Parámetros:** ninguno.
+
+**Respuesta**
+
+| Campo | Qué cuenta |
+|---|---|
+| `vertices` | V. |
+| `operacionesFloyd` | Iteraciones del triple bucle de Floyd: cada una es una relajación (suma + comparación) d[i][k] + d[k][j] < d[i][j]. Siempre V³. |
+| `nodosExpandidosDijkstra` | Extracciones **válidas** de la cola de prioridad, sumadas sobre las V corridas. No cuenta las entradas viejas que se descartan (eliminación perezosa). En un grafo conexo cada corrida expande los V vértices: V². |
+| `aristasExaminadasDijkstra` | Aristas miradas al expandir cada nodo (el tamaño de su lista de adyacencia), sumadas sobre las V corridas. Cada corrida mira las 2E entradas de la lista de adyacencia: V · 2E. |
+
+**Ejemplo**
+
+```
+GET /api/grafo/floyd/comparacion
+```
+
+```json
+{"vertices":12,"operacionesFloyd":1728,"nodosExpandidosDijkstra":144,"aristasExaminadasDijkstra":504}
+```
+
+- 1728 = 12³.
+- 144 = 12 corridas × 12 nodos expandidos (el grafo es conexo).
+- 504 = 12 corridas × 42 (2E = 2 × 21 entradas de adyacencia, porque cada calle está en las dos
+  listas).
+
+Lo verifica `FloydWarshallTest.comparacionConDijkstraEnElDominio`. Que los dos métodos den **los
+mismos 144 valores** lo verifica `coincideConDijkstraEnTodosLosPares`.
+
+**Errores:** si hay alguna calle con costo negativo → 400 `Dijkstra no admite costos negativos: ...`
+(la comparación necesita correr Dijkstra, así que valida los costos antes de empezar). Un ciclo
+negativo implica alguna arista negativa, así que también cae en este 400.
+
+**Análisis asintótico**
+- **Floyd:** Θ(V³), independiente de E.
+- **Dijkstra V veces:** V · O((V + E) log V) = O(V (V + E) log V).
+  - Grafo **disperso** (E ≈ V, como un mapa de calles: cada lugar solo se conecta con sus vecinos):
+    O(V² log V), **menor** que V³.
+  - Grafo **denso** (E ≈ V²): O(V³ log V), **mayor** que V³: ahí conviene Floyd.
+- Ejemplo de escala con la proporción de nuestro grafo (E ≈ 2V): con V = 1000, Floyd hace 10⁹
+  relajaciones; Dijkstra V veces ronda 1000 · (1000 + 2 · 2000) · log₂ 1000 ≈ 5 · 10⁷, unas 20
+  veces menos. Con V = 1000 y grafo denso (E ≈ 5 · 10⁵), Dijkstra V veces ronda 10¹⁰ y pierde.
+
+**Lectura honesta del ejemplo.** Las métricas no miden lo mismo con el mismo costo: cada
+relajación de Floyd es O(1), mientras que cada arista examinada por Dijkstra puede generar una
+operación de heap O(log V). Con V = 12, 504 · log₂ 12 ≈ 1800 es del mismo orden que 1728: en un
+grafo tan chico la diferencia es menor; lo que importa es cómo crece cada uno con V.
+
+**Cuándo conviene cada uno**
+
+| | Floyd-Warshall | Dijkstra V veces |
+|---|---|---|
+| Complejidad | O(V³) | O(V (V + E) log V) |
+| Grafo disperso | Peor | **Mejor** |
+| Grafo denso | **Mejor** (y más simple) | Peor |
+| Aristas negativas (sin ciclo negativo) | **Sí** | No |
+| Detecta ciclos negativos | **Sí** (diagonal) | No |
+| Espacio | O(V²) (la matriz) | O(V + E) por corrida, O(V²) si se guardan todos los resultados |
+
+**Complejidad del endpoint:** O(V³ + V (V + E) log V), porque corre los dos. Espacio O(V² + E).
+
+**Estructura usada:** la matriz de adyacencia para Floyd y, para Dijkstra, la lista de adyacencia
+con la `PriorityQueue` (las mismas de cada ficha). Los contadores son variables `long`.
 
 ---
 
@@ -667,7 +928,279 @@ mezcla, y en un momento dado las listas vivas suman O(n). La pila de recursión 
 | Peor caso | O(n²) | O(n log n) |
 | Espacio extra | O(log n) de pila (más la copia) | O(n) |
 | Estable | No | Sí |
-| Donde lo usamos | `/quicksort` | `/mergesort` y Kruskal (necesita orden garantizado y determinista) |
+| Donde lo usamos | `/quicksort` | `/mergesort`, Kruskal y el greedy de la mochila (necesitan orden garantizado y determinista) |
+
+---
+
+### El problema de la mochila (común a `/greedy`, `/dinamica` y `/comparar`)
+
+En el dominio: un sobreviviente sale del refugio con una mochila que aguanta `capacidad` kg y tiene
+que decidir **qué suministros llevar**. Cada suministro se lleva **entero o no se lleva** (no se
+puede llevar media radio): es la **mochila 0/1**.
+
+- **Función objetivo:** maximizar la utilidad total Σ vᵢ de los suministros elegidos.
+- **Restricción:** Σ pᵢ ≤ capacidad (pesos en kg).
+- **Datos:** los 8 suministros de la base (tabla en el [README](../README.md#suministros-items)),
+  leídos ordenados por id con `findAllByOrderByIdAsc()` para que el resultado sea reproducible.
+
+Las dos técnicas están en `algorithm/Seleccion.java` y devuelven el mismo tipo de respuesta:
+
+| Campo | Significado |
+|---|---|
+| `elegidos` | Suministros que van en la mochila. Cada uno con `id`, `nombre`, `peso` (kg), `valor` (utilidad) y `nodoId` (lugar donde está). |
+| `valorTotal` | Utilidad total de lo elegido. |
+| `pesoTotal` | kg ocupados (≤ capacidad). |
+| `tecnica` | `GREEDY` o `PROGRAMACION_DINAMICA`. |
+
+---
+
+## GET /api/seleccion/greedy
+
+**Mochila 0/1 resuelta con un algoritmo greedy.** En el dominio: llenar la mochila tomando primero
+los suministros que más utilidad dan **por kg** (el ratio utilidad/peso), sin volver atrás.
+
+Implementación: `Seleccion.greedy` (`algorithm/Seleccion.java`). El controller solo arma el
+`Comparator` según `criterio` y `orden`; el algoritmo es el mismo para cualquier criterio.
+
+**Parámetros**
+
+| Nombre | Tipo | Obligatorio | Significado |
+|---|---|---|---|
+| `capacidad` | double (≥ 0) | sí | kg que aguanta la mochila. Acepta decimales (greedy no indexa una tabla). |
+| `criterio` | String: `valor` \| `peso` \| `ratio` | no (default `ratio`) | Qué se mira para decidir el orden en que se consideran los suministros. |
+| `orden` | String: `asc` \| `desc` | no (default `desc`) | `desc` = el mayor primero. |
+
+El greedy "de la materia" es el default, **ratio descendente**. Los otros criterios están para
+comparar (por ejemplo `criterio=valor` es "lo más útil primero", `criterio=peso&orden=asc` es "lo
+más liviano primero").
+
+**Ejemplo**
+
+```
+GET /api/seleccion/greedy?capacidad=12
+```
+
+```json
+{"elegidos":[{"id":"S1","nombre":"Botiquin","peso":3.0,"valor":50.0,"nodoId":"HIT"},{"id":"S2","nombre":"Comida enlatada","peso":4.0,"valor":40.0,"nodoId":"ABA"},{"id":"S4","nombre":"Linterna","peso":1.0,"valor":8.0,"nodoId":"OBE"},{"id":"S5","nombre":"Radio","peso":2.0,"valor":14.0,"nodoId":"RET"}],"valorTotal":112.0,"pesoTotal":10.0,"tecnica":"GREEDY"}
+```
+
+Los elegidos salen en el orden en que se tomaron (ratio decreciente). Traza:
+
+| Orden | Suministro | kg | Utilidad | Ratio | Decisión | kg usados |
+|---|---|---|---|---|---|---|
+| 1 | S1 Botiquín | 3 | 50 | 16,67 | Toma | 3 |
+| 2 | S2 Comida enlatada | 4 | 40 | 10,00 | Toma | 7 |
+| 3 | S4 Linterna | 1 | 8 | 8,00 | Toma | 8 |
+| 4 | S3 Agua 7L | 7 | 55 | 7,86 | **Saltea** (7 > 4 libres) | 8 |
+| 5 | S5 Radio | 2 | 14 | 7,00 | Toma | 10 |
+| 6 | S7 Bolsa de dormir | 6 | 30 | 5,00 | Saltea | 10 |
+| 7 | S8 Herramientas | 5 | 24 | 4,80 | Saltea | 10 |
+| 8 | S6 Bate | 5 | 10 | 2,00 | Saltea | 10 |
+
+Resultado: **112 de utilidad con 10 kg**. El óptimo con 12 kg es **119** (`/dinamica`): este es el
+juego de datos donde el greedy **no** da el óptimo. El análisis completo está en
+[`VERIFICACIONES.md`](VERIFICACIONES.md#4-greedy-vs-mochila-01-con-pd).
+
+**Saltea, no corta.** Cuando un suministro no entra en lo que queda, el algoritmo **sigue con el
+siguiente** en vez de terminar, porque uno más liviano todavía puede entrar. Con 12 kg, S3 (7 kg) no
+entra en los 4 kg libres, pero S5 (2 kg) sí: saltear da 112; **cortar en S3 daría 98** (S1 + S2 +
+S4). Las dos variantes son greedy, pero cortar desperdicia capacidad sin ninguna razón.
+
+**Errores**
+
+```
+GET /api/seleccion/greedy?capacidad=-1
+```
+
+```
+400 Bad Request
+{"estado":"ERROR","detalle":"La capacidad no puede ser negativa: -1.0"}
+```
+
+| Situación | Código | `detalle` |
+|---|---|---|
+| `capacidad` negativa | 400 | `La capacidad no puede ser negativa: ...` |
+| `capacidad=NaN` o `Infinity` (Java los acepta como `double`) | 400 | `La capacidad tiene que ser un numero finito: NaN` |
+| Algún suministro con peso o valor negativo | 400 | `Peso y valor no pueden ser negativos: <id>` |
+| `capacidad` no numérica (ej. `abc`) | 400 | `Valor invalido para capacidad: abc` |
+| Falta `capacidad` | 400 | `Falta el parametro: capacidad` |
+| `criterio` u `orden` inválido | 400 | `Criterio invalido: ...` / `Orden invalido: ...` |
+
+**Por qué es greedy.** Elige en cada paso **la mejor opción local** (el mayor ratio que todavía
+entra) y **nunca reconsidera** una decisión: lo que entró no sale y lo que se salteó no se vuelve a
+mirar. Es un único recorrido de la lista ordenada.
+
+**No garantiza el óptimo en la mochila 0/1.** Como los suministros son indivisibles, tomar el mejor
+ratio puede dejar capacidad sin usar que una combinación distinta aprovecharía (con 12 kg sobran
+2 kg; el óptimo cambia S2 + S4 por S3). Si se pudiera **fraccionar** el primer suministro que no
+entra, sería la **mochila fraccional de la clase 3**, y ahí el greedy por ratio **sí es óptimo**:
+cada kg se llena con la mayor utilidad por kg disponible. Con 12 kg la fraccional daría
+98 + 4/7 · 55 ≈ 129,4, una cota superior del óptimo 0/1 (119 ≤ 129,4).
+
+**Complejidad temporal: O(n log n)**, con n = cantidad de suministros.
+- Ordenar por el criterio con **MergeSort propio**: O(n log n) (recurrencia
+  T(n) = 2T(n/2) + O(n), ver la ficha de MergeSort).
+- Recorrer la lista ordenada una vez: O(n), cada decisión es una comparación y una resta.
+- Validar los datos y sumar el resultado: O(n).
+- Total: O(n log n) + O(n) = **O(n log n), dominada por el ordenamiento**.
+
+**Complejidad espacial: O(n)**: la lista ordenada (MergeSort crea listas auxiliares O(n)) y la
+lista de elegidos.
+
+**Estructura usada:**
+- **MergeSort propio** (`Ordenamiento.mergeSort`, sin `Collections.sort`): O(n log n) en todos los
+  casos y **estable**, así que ante dos ratios iguales respeta el orden de entrada (por id) y el
+  resultado es determinista.
+- **`ArrayList`** para la lista ordenada y los elegidos: recorrido secuencial y `add` O(1)
+  amortizado.
+
+---
+
+## GET /api/seleccion/dinamica
+
+**Mochila 0/1 resuelta con programación dinámica.** En el dominio: la combinación de suministros
+que da **la máxima utilidad posible** sin pasarse de los kg de la mochila. A diferencia del greedy,
+siempre da el óptimo.
+
+Implementación: `Seleccion.programacionDinamica` (`algorithm/Seleccion.java`), tabla bottom-up y
+recuperación del camino.
+
+**Parámetros**
+
+| Nombre | Tipo | Obligatorio | Significado |
+|---|---|---|---|
+| `capacidad` | int (≥ 0) | sí | kg que aguanta la mochila. Es **entero** porque indexa las columnas de la tabla. |
+
+Los pesos de los suministros también tienen que ser **enteros** (son los índices j − pᵢ de la
+tabla); los valores pueden ser reales.
+
+**Ejemplo**
+
+```
+GET /api/seleccion/dinamica?capacidad=12
+```
+
+```json
+{"elegidos":[{"id":"S1","nombre":"Botiquin","peso":3.0,"valor":50.0,"nodoId":"HIT"},{"id":"S3","nombre":"Agua 7L","peso":7.0,"valor":55.0,"nodoId":"PCE"},{"id":"S5","nombre":"Radio","peso":2.0,"valor":14.0,"nodoId":"RET"}],"valorTotal":119.0,"pesoTotal":12.0,"tecnica":"PROGRAMACION_DINAMICA"}
+```
+
+Botiquín + Agua 7L + Radio = 3 + 7 + 2 = **12 kg, 119 de utilidad**, contra 112 del greedy. Los
+elegidos salen en el orden de entrada (por id).
+
+Capacidad mayor que todo lo disponible:
+
+```
+GET /api/seleccion/dinamica?capacidad=1000000000
+```
+
+Devuelve los 8 suministros, `valorTotal` 231.0 y `pesoTotal` 33.0, en unos 0,04 s: la tabla se
+arma con W = min(capacidad, Σ pesos) = 33 columnas útiles, no mil millones (ver más abajo).
+
+**Errores**
+
+| Situación | Código | `detalle` |
+|---|---|---|
+| `capacidad` negativa | 400 | `La capacidad no puede ser negativa: -1.0` |
+| `capacidad` no entera o fuera de rango de `int` (ej. `12.5`) | 400 | `Valor invalido para capacidad: 12.5` |
+| Algún suministro con peso no entero | 400 | `La programacion dinamica exige pesos enteros: <id> pesa <peso>` |
+| Algún suministro con peso o valor negativo | 400 | `Peso y valor no pueden ser negativos: <id>` |
+
+**Subproblema y recurrencia.** dp[i][j] = mejor utilidad usando **solo los primeros i suministros**
+con una mochila de **j kg**.
+
+```
+dp[0][j] = 0                    (sin suministros no hay utilidad)
+dp[i][0] = 0                    (mochila de 0 kg)
+dp[i][j] = dp[i-1][j]                                si pᵢ > j   (el i no entra)
+dp[i][j] = max(dp[i-1][j], dp[i-1][j - pᵢ] + vᵢ)     si pᵢ ≤ j   (no tomarlo / tomarlo)
+```
+
+Es PD porque cumple las dos condiciones de la clase 6:
+- **Subestructura óptima:** si el suministro i está en la solución óptima para (i, j), el resto es
+  óptimo para (i − 1, j − pᵢ); si no está, la solución es la óptima para (i − 1, j).
+- **Subproblemas superpuestos:** distintas combinaciones de decisiones llegan al mismo (i, j). La
+  recursión sin tabla resolvería los mismos subproblemas muchas veces:
+  T(n) = 2T(n − 1) + O(1) → sustracción con a = 2 > 1 → O(2ⁿ) (es la fuerza bruta). La tabla
+  calcula cada (i, j) **una sola vez**.
+
+Se llena **bottom-up**, fila por fila: cada fila solo usa la anterior, que ya está completa. La
+respuesta es dp[n][W].
+
+**Recuperación del camino.** La tabla dice el máximo pero no **qué** suministros. Se recorre hacia
+atrás desde dp[n][W]: si dp[i][j] ≠ dp[i − 1][j], el valor cambió al agregar el suministro i, así
+que **se tomó**: se marca y se resta su peso (j −= pᵢ). Si son iguales, no se tomó. Se sube a la
+fila i − 1 y se repite hasta i = 1. La tabla 4 × 9 del ejemplo de la clase 6 con su recuperación
+está en [`VERIFICACIONES.md`](VERIFICACIONES.md#43-tabla-dp-a-mano-ejemplo-de-la-clase-6).
+
+**W = min(capacidad, Σ pesos).** Si la mochila aguanta más que la suma de todos los pesos, entran
+todos y las columnas de más repetirían el mismo valor. Acotar W da exactamente el mismo resultado y
+evita reservar una tabla gigante (con `capacidad=1000000000` serían 9 × 10⁹ celdas).
+
+**Complejidad temporal: O(n · W)**, con W = min(capacidad, Σ pesos).
+- La tabla tiene (n + 1) × (W + 1) celdas y cada una se calcula en O(1) (una o dos lecturas de la
+  fila anterior y una comparación).
+- La recuperación recorre las n filas una vez: O(n). Validar y sumar pesos: O(n).
+- **Es pseudopolinómica:** es polinómica en el **valor** numérico W, no en el **tamaño** de la
+  entrada. W se escribe con log W bits; si se duplica la cantidad de bits de la capacidad, W puede
+  elevarse al cuadrado. En función del tamaño de la entrada crece **exponencialmente**. Por eso
+  acotar W con Σ pesos importa.
+
+**Complejidad espacial: O(n · W)**: la tabla `double[n + 1][W + 1]` completa, más el arreglo
+`tomado[]` (n). Se guarda la tabla entera (y no solo dos filas) porque la recuperación necesita
+mirar todas las filas.
+
+**Estructura usada:**
+- **Matriz `double[][]`** (la tabla dp): acceso O(1) a dp[i − 1][j] y dp[i − 1][j − pᵢ] por índice,
+  que es lo que hace O(1) cada celda.
+- **Arreglo `boolean[] tomado`** para marcar los elegidos durante la recuperación y después
+  devolverlos en el orden de entrada.
+
+---
+
+## GET /api/seleccion/comparar
+
+**Greedy por ratio contra la mochila 0/1 con PD, sobre los mismos suministros y la misma
+capacidad.** En el dominio: ¿cuánta utilidad se pierde por elegir "a ojo" (mejor ratio primero) en
+vez de calcular el óptimo?
+
+Implementación: el controller lee los suministros **una vez** y delega en `Seleccion.comparar`, que
+corre `greedy` (criterio ratio descendente) y `programacionDinamica` sobre la misma lista y devuelve
+el record `Seleccion.Comparacion`.
+
+**Parámetros**
+
+| Nombre | Tipo | Obligatorio | Significado |
+|---|---|---|---|
+| `capacidad` | int (≥ 0) | sí | kg de la mochila (entero, porque lo usa la PD). |
+
+**Ejemplo** (abreviado: los `elegidos` son los mismos de las dos fichas anteriores)
+
+```
+GET /api/seleccion/comparar?capacidad=12
+```
+
+```
+{"greedy":{"elegidos":[S1, S2, S4, S5],"valorTotal":112.0,"pesoTotal":10.0,"tecnica":"GREEDY"},
+ "dinamica":{"elegidos":[S1, S3, S5],"valorTotal":119.0,"pesoTotal":12.0,"tecnica":"PROGRAMACION_DINAMICA"}}
+```
+
+Con 12 kg el greedy pierde 7 puntos de utilidad (112 vs. 119). La tabla con otras capacidades
+(0 a 33 kg) está en [`VERIFICACIONES.md`](VERIFICACIONES.md#44-resumen-greedy-vs-pd-por-capacidad).
+
+**Errores:** los mismos que `/dinamica`.
+
+**Complejidad:** O(n log n + n · W), la suma de las dos técnicas; en la práctica domina la tabla de
+la PD. Espacio O(n · W).
+
+**Greedy vs. PD**
+
+| | Greedy por ratio | Mochila 0/1 con PD |
+|---|---|---|
+| Garantiza el óptimo (0/1) | No | **Sí** |
+| Tiempo | O(n log n) | O(n · W), pseudopolinómico |
+| Espacio | O(n) | O(n · W) |
+| Capacidad y pesos | Reales | Enteros |
+| Óptimo en la mochila fraccional | **Sí** | (no aplica) |
 
 ---
 
@@ -708,9 +1241,6 @@ escribe cuando estén implementados y probados.
 
 | Método y ruta | Parámetros | Algoritmo |
 |---|---|---|
-| `GET /api/grafo/floyd` | — | Floyd-Warshall |
 | `GET /api/grafo/ucs` | `origen` (String), `destino` (String) | UCS (opcional) |
 | `GET /api/grafo/rutas` | `origen` (String), `destino` (String), `costoMaximo` (double, default 1000), `saltosMaximos` (int, default 10) | Backtracking |
-| `GET /api/seleccion/greedy` | `capacidad` (double) | Greedy |
-| `GET /api/seleccion/dinamica` | `capacidad` (int) | Mochila 0/1 con PD |
 | `GET /api/seleccion/repartir` | `contenedores` (int, ≥ 1) | Branch & Bound |
