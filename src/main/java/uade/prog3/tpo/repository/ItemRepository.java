@@ -10,4 +10,7 @@ import java.util.List;
 public interface ItemRepository extends Neo4jRepository<Item, String> {
 
     List<Item> findByNodoId(String nodoId);
+
+    /** Todos los items ordenados por id: los algoritmos reciben siempre la misma entrada. */
+    List<Item> findAllByOrderByIdAsc();
 }

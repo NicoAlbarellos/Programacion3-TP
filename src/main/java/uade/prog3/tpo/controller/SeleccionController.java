@@ -33,20 +33,32 @@ public class SeleccionController {
         this.ramificacionYPoda = ramificacionYPoda;
     }
 
+    /** Ordenados por id: findAll() no garantiza orden y el resultado tiene que ser reproducible. */
     private List<Item> todos() {
-        return itemRepository.findAll();
+        return itemRepository.findAllByOrderByIdAsc();
     }
 
-    /** GET /api/seleccion/greedy?capacidad=10 */
+    /**
+     * GET /api/seleccion/greedy?capacidad=12&criterio=ratio&orden=desc
+     * criterio admite: valor | peso | ratio. orden admite: asc | desc
+     */
     @GetMapping("/greedy")
-    public Seleccion.Resultado greedy(@RequestParam double capacidad) {
-        return seleccion.greedy(todos(), capacidad);
+    public Seleccion.Resultado greedy(@RequestParam double capacidad,
+                                      @RequestParam(defaultValue = "ratio") String criterio,
+                                      @RequestParam(defaultValue = "desc") String orden) {
+        return seleccion.greedy(todos(), capacidad, comparador(criterio, orden));
     }
 
     /** GET /api/seleccion/dinamica?capacidad=10 */
     @GetMapping("/dinamica")
     public Seleccion.Resultado dinamica(@RequestParam int capacidad) {
         return seleccion.programacionDinamica(todos(), capacidad);
+    }
+
+    /** GET /api/seleccion/comparar?capacidad=12 : greedy por ratio contra la mochila 0/1 con PD. */
+    @GetMapping("/comparar")
+    public Seleccion.Comparacion comparar(@RequestParam int capacidad) {
+        return seleccion.comparar(todos(), capacidad);
     }
 
     /**
