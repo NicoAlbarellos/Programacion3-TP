@@ -1,0 +1,18 @@
+# Neo4j local para el TP. La password se toma de .env (que NO se commitea).
+#   cp .env.example .env   -> completar NEO4J_PASSWORD (minimo 8 caracteres)
+#   docker compose up -d
+# Navegador de Neo4j: http://localhost:7474
+services:
+  neo4j:
+    image: neo4j:5.26-community
+    container_name: tpo-prog3-neo4j
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    environment:
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:?Definir NEO4J_PASSWORD en .env}
+    volumes:
+      - neo4j-data:/data
+
+volumes:
+  neo4j-data:
