@@ -5,6 +5,7 @@ import uade.prog3.tpo.service.Grafo;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 /**
  * UNIDAD: Backtracking (clases 9 y 10)      PUNTAJE: 1 punto
@@ -58,13 +59,27 @@ public class Backtracking {
      */
     public ResultadoRutas rutasSimples(Grafo grafo, String origenId, String destinoId,
                                        double costoMaximo, int saltosMaximos) {
+        return rutasSimples(grafo, origenId, destinoId, costoMaximo, saltosMaximos, Set.of());
+    }
+
+    /**
+     * Igual, pero sin pasar por lugares infectados: se marcan como visitados ANTES de
+     * empezar (en las dos corridas), asi el chequeo de camino simple ya los descarta.
+     * La complejidad no cambia.
+     *
+     * @throws IllegalArgumentException ademas, si un infectado no existe o si el
+     *                                  origen o el destino estan infectados
+     */
+    public ResultadoRutas rutasSimples(Grafo grafo, String origenId, String destinoId,
+                                       double costoMaximo, int saltosMaximos, Set<String> infectados) {
         int origen = grafo.indiceDe(origenId);
         int destino = grafo.indiceDe(destinoId);
+        boolean[] bloqueado = LugaresInfectados.marcar(grafo, infectados, origenId, destinoId);
         validarLimites(costoMaximo, saltosMaximos);
 
-        Busqueda conPoda = new Busqueda(grafo, destino, costoMaximo, saltosMaximos, true);
+        Busqueda conPoda = new Busqueda(grafo, destino, costoMaximo, saltosMaximos, true, bloqueado);
         conPoda.explorarDesde(origen);
-        Busqueda sinPoda = new Busqueda(grafo, destino, costoMaximo, saltosMaximos, false);
+        Busqueda sinPoda = new Busqueda(grafo, destino, costoMaximo, saltosMaximos, false, bloqueado);
         sinPoda.explorarDesde(origen);
 
         return new ResultadoRutas(List.copyOf(conPoda.rutas), conPoda.nodosExplorados,
@@ -100,13 +115,14 @@ public class Backtracking {
         private final List<Ruta> rutas = new ArrayList<>();
         private long nodosExplorados = 0;
 
-        Busqueda(Grafo grafo, int destino, double costoMaximo, int saltosMaximos, boolean conPoda) {
+        Busqueda(Grafo grafo, int destino, double costoMaximo, int saltosMaximos, boolean conPoda,
+                 boolean[] bloqueado) {
             this.grafo = grafo;
             this.destino = destino;
             this.costoMaximo = costoMaximo;
             this.saltosMaximos = saltosMaximos;
             this.conPoda = conPoda;
-            this.visitado = new boolean[grafo.cantidadVertices()];
+            this.visitado = bloqueado.clone(); // infectados = ya visitados: nunca se entra
         }
 
         void explorarDesde(int origen) {

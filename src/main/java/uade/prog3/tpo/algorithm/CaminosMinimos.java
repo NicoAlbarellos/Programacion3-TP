@@ -12,6 +12,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.PriorityQueue;
+import java.util.Set;
 
 /**
  * UNIDAD: Grafos II (clase 5) y PD sobre grafos (clase 8)
@@ -79,11 +80,27 @@ public class CaminosMinimos {
      * @throws IllegalStateException    si el destino no es alcanzable desde el origen
      */
     public Camino dijkstra(Grafo grafo, String origenId, String destinoId) {
+        return dijkstra(grafo, origenId, destinoId, Set.of());
+    }
+
+    /**
+     * Dijkstra evitando lugares infectados: los infectados nunca se alcanzan, asi que
+     * nunca se expanden ni quedan como paso intermedio. Alcanza con NO relajar hacia
+     * ellos (ver relajarVecinos): su dist[] queda en INFINITO y jamas entran a la cola.
+     *
+     * Complejidad: la misma, O((V + E) log V). Marcar los infectados cuesta O(V + I)
+     * y la consulta bloqueado[v] es O(1) por arista.
+     *
+     * @throws IllegalArgumentException si un id no existe o si el origen o el destino estan infectados
+     * @throws IllegalStateException    si sin los infectados el destino queda inalcanzable
+     */
+    public Camino dijkstra(Grafo grafo, String origenId, String destinoId, Set<String> infectados) {
         int origen = grafo.indiceDe(origenId);
         int destino = grafo.indiceDe(destinoId);
+        boolean[] bloqueado = LugaresInfectados.marcar(grafo, infectados, origenId, destinoId);
         validarCostosNoNegativos(grafo);
 
-        ArbolDeCaminos arbol = arbolDesde(grafo, origen, SIN_DESTINO);
+        ArbolDeCaminos arbol = arbolDesde(grafo, origen, SIN_DESTINO, bloqueado);
         verificarAlcanzable(arbol, destino, origenId, destinoId);
         return new Camino(reconstruirCamino(grafo, arbol.previo(), destino), arbol.dist()[destino]);
     }
@@ -101,8 +118,9 @@ public class CaminosMinimos {
      *
      * destino = SIN_DESTINO: Dijkstra, arbol completo.
      * destino = un vertice: UCS, corta cuando ese vertice SALE de la cola.
+     * bloqueado[v] = true: v no se puede usar (lugar infectado).
      */
-    private ArbolDeCaminos arbolDesde(Grafo grafo, int origen, int destino) {
+    private ArbolDeCaminos arbolDesde(Grafo grafo, int origen, int destino, boolean[] bloqueado) {
         int n = grafo.cantidadVertices();
         double[] dist = new double[n];
         int[] previo = new int[n];
@@ -125,15 +143,27 @@ public class CaminosMinimos {
                 break; // UCS: al SACAR el destino su dist[] ya es definitiva; lo que queda cuesta >=
             }
             aristasExaminadas += grafo.vecinos(u).size();
-            relajarVecinos(grafo, u, dist, previo, cola);
+            relajarVecinos(grafo, u, dist, previo, cola, bloqueado);
         }
         return new ArbolDeCaminos(dist, previo, nodosExpandidos, aristasExaminadas);
     }
 
-    /** Relajacion: si pasar por u mejora la distancia a v, se actualiza y se reencola v. */
-    private void relajarVecinos(Grafo grafo, int u, double[] dist, int[] previo, PriorityQueue<EnCola> cola) {
+    /** Ningun vertice bloqueado: Dijkstra/UCS sin infectados. */
+    private boolean[] sinBloqueos(Grafo grafo) {
+        return new boolean[grafo.cantidadVertices()];
+    }
+
+    /**
+     * Relajacion: si pasar por u mejora la distancia a v, se actualiza y se reencola v.
+     * Hacia un vertice bloqueado no se relaja: nunca entra a la cola ni a previo[].
+     */
+    private void relajarVecinos(Grafo grafo, int u, double[] dist, int[] previo,
+                                PriorityQueue<EnCola> cola, boolean[] bloqueado) {
         for (Grafo.Arista arista : grafo.vecinos(u)) {
             int v = arista.destino();
+            if (bloqueado[v]) {
+                continue; // lugar infectado: no se pasa por ahi
+            }
             double alternativa = dist[u] + arista.costo();
             if (alternativa < dist[v]) {
                 dist[v] = alternativa;
@@ -287,7 +317,7 @@ public class CaminosMinimos {
         long nodosExpandidos = 0;
         long aristasExaminadas = 0;
         for (int origen = 0; origen < grafo.cantidadVertices(); origen++) {
-            ArbolDeCaminos arbol = arbolDesde(grafo, origen, SIN_DESTINO);
+            ArbolDeCaminos arbol = arbolDesde(grafo, origen, SIN_DESTINO, sinBloqueos(grafo));
             nodosExpandidos += arbol.nodosExpandidos();
             aristasExaminadas += arbol.aristasExaminadas();
         }
@@ -320,9 +350,9 @@ public class CaminosMinimos {
         int destino = grafo.indiceDe(destinoId);
         validarCostosNoNegativos(grafo);
 
-        ArbolDeCaminos arbol = arbolDesde(grafo, origen, destino);
+        ArbolDeCaminos arbol = arbolDesde(grafo, origen, destino, sinBloqueos(grafo));
         verificarAlcanzable(arbol, destino, origenId, destinoId);
-        long expandidosDijkstra = arbolDesde(grafo, origen, SIN_DESTINO).nodosExpandidos();
+        long expandidosDijkstra = arbolDesde(grafo, origen, SIN_DESTINO, sinBloqueos(grafo)).nodosExpandidos();
         return new ResultadoUcs(reconstruirCamino(grafo, arbol.previo(), destino), arbol.dist()[destino],
                 arbol.nodosExpandidos(), expandidosDijkstra);
     }

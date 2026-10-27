@@ -10,6 +10,7 @@ import uade.prog3.tpo.service.GrafoService;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Endpoints de los algoritmos sobre grafos.
@@ -70,10 +71,11 @@ public class GrafoController {
         return recorridos.bfs(grafoService.cargar(DIRIGIDO), origen);
     }
 
-    /** GET /api/grafo/dijkstra?origen=RET&destino=CUN */
+    /** GET /api/grafo/dijkstra?origen=RET&destino=CUN  (opcional: &infectados=MON,REC) */
     @GetMapping("/dijkstra")
-    public CaminosMinimos.Camino dijkstra(@RequestParam String origen, @RequestParam String destino) {
-        return caminosMinimos.dijkstra(grafoService.cargar(DIRIGIDO), origen, destino);
+    public CaminosMinimos.Camino dijkstra(@RequestParam String origen, @RequestParam String destino,
+                                          @RequestParam(required = false) Set<String> infectados) {
+        return caminosMinimos.dijkstra(grafoService.cargar(DIRIGIDO), origen, destino, infectados);
     }
 
     /** GET /api/grafo/floyd */
@@ -119,13 +121,14 @@ public class GrafoController {
         return arbolRecubrimiento.kruskal(grafoService.cargar(false));
     }
 
-    /** GET /api/grafo/rutas?origen=RET&destino=CUN&costoMaximo=150&saltosMaximos=4 */
+    /** GET /api/grafo/rutas?origen=RET&destino=CUN&costoMaximo=150&saltosMaximos=4  (opcional: &infectados=REC) */
     @GetMapping("/rutas")
     public Backtracking.ResultadoRutas rutas(@RequestParam String origen,
                                              @RequestParam String destino,
                                              @RequestParam(defaultValue = "1000") double costoMaximo,
-                                             @RequestParam(defaultValue = "10") int saltosMaximos) {
+                                             @RequestParam(defaultValue = "10") int saltosMaximos,
+                                             @RequestParam(required = false) Set<String> infectados) {
         return backtracking.rutasSimples(grafoService.cargar(DIRIGIDO), origen, destino,
-                costoMaximo, saltosMaximos);
+                costoMaximo, saltosMaximos, infectados);
     }
 }
