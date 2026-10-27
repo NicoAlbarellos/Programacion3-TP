@@ -30,6 +30,7 @@ verifican Dijkstra, Prim, Kruskal, greedy vs. PD y Floyd están en
 - [GET /api/seleccion/dinamica](#get-apiselecciondinamica) — Mochila 0/1 con programación dinámica
 - [GET /api/seleccion/comparar](#get-apiseleccioncomparar) — Greedy vs. PD sobre la misma mochila
 - [GET /api/seleccion/repartir](#get-apiseleccionrepartir) — Branch & Bound (reparto en k contenedores)
+- [GET /api/mapa](#get-apimapa) — datos del mapa para la demo visual (no es un algoritmo)
 - [Errores](#errores)
 - [Pendientes](#pendientes)
 
@@ -1526,6 +1527,47 @@ recorte a min(k, n) sería O(n + k). La salida ocupa O(n + m).
   mejor-primero con cola de prioridad, que puede guardar muchos nodos abiertos.
 - **`LinkedHashMap`** para la respuesta: los sobrevivientes salen en orden (1, 2, 3, …).
 - El estado va en un objeto `Busqueda` por llamada, porque el `@Component` es singleton.
+
+---
+
+## GET /api/mapa
+
+**Datos para dibujar el mapa de la demo visual.** Es un **endpoint de presentación para la demo, no
+es un algoritmo del TP**: lo usa la página `static/index.html` (servida en `/`) para dibujar los
+lugares y las calles y para llenar los selectores de origen y destino.
+
+Implementación: `MapaController` carga el grafo con `GrafoService.cargar(DIRIGIDO)` (`DIRIGIDO = false`,
+el mapa se dibuja no dirigido) y los nodos con `NodoRepository.findAll()`, y arma el record
+`service/Mapa` con `Mapa.desde(grafo, nodos)`. No tiene lógica algorítmica.
+
+**Parámetros:** ninguno.
+
+**Respuesta**
+
+| Campo | Qué es |
+|---|---|
+| `lugares` | Un objeto por vértice, en el orden del grafo (por id): `id`, `nombre`, `tipo` (`REFUGIO`, `HOSPITAL`, `ESTACION`, `PUNTO`) y `valor` (capacidad del refugio, en personas). Si un id no tiene nodo en la base, aparece con su id como nombre y tipo `PUNTO`. |
+| `calles` | Una entrada por calle, **una sola vez** aunque el grafo no dirigido la tenga en las dos listas de adyacencia: `origen`, `destino` (el de menor índice primero) y `costo` (minutos a pie). |
+
+**Ejemplo** (abreviado)
+
+```
+GET /api/mapa
+```
+
+```json
+{"lugares":[{"id":"ABA","nombre":"Abasto","tipo":"REFUGIO","valor":400.0},{"id":"CON","nombre":"Constitucion","tipo":"ESTACION","valor":250.0}, ...],
+ "calles":[{"origen":"ABA","destino":"HIT","costo":19.0},{"origen":"ABA","destino":"PCE","costo":30.0}, ...]}
+```
+
+Con la carga inicial: 12 lugares y 21 calles (lo verifica `MapaTest`, sin Neo4j).
+
+**Complejidad: O(V + E)** en tiempo y espacio: la carga del grafo es O(V + E), indexar los nodos en
+un `HashMap` es O(V) y recorrer las listas de adyacencia (2E entradas) emitiendo cada calle desde su
+extremo de menor índice es O(V + E).
+
+**Errores:** si la base no responde, 500 `{"estado":"ERROR","detalle":"Error interno: ..."}` (como
+el resto de la API). La página lo muestra como "Sin API" en la cabecera.
 
 ---
 

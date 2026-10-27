@@ -1,0 +1,852 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Apocalipsis zombie en CABA — TPO Programación III</title>
+<style>
+  /* ---------- Tema (tokens) ---------- */
+  :root {
+    --bg: #0e1116;
+    --superficie: #161b22;
+    --superficie-2: #1d232c;
+    --borde: #2b333f;
+    --texto: #e7eaf0;
+    --tenue: #9aa5b4;
+    --acento: #fbbf24;      /* resaltado principal (camino, ruta elegida) */
+    --acento-2: #34d399;    /* arbol de recubrimiento */
+    --visita: #60a5fa;      /* recorridos */
+    --peligro: #f87171;
+    --refugio: #34d399;
+    --hospital: #f87171;
+    --estacion: #60a5fa;
+    --punto: #a78bfa;
+    --calle: #3a4452;
+    --radio: 10px;
+    --fuente: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, "Cascadia Mono", Consolas, "Liberation Mono", monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg); color: var(--texto); font-family: var(--fuente);
+    font-size: 16px; line-height: 1.45;
+  }
+  header {
+    display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap;
+    padding: 14px 24px; border-bottom: 1px solid var(--borde); background: var(--superficie);
+  }
+  header h1 { margin: 0; font-size: 1.35rem; letter-spacing: .2px; }
+  header h1 span { color: var(--acento); }
+  header .sub { color: var(--tenue); font-size: .95rem; }
+  #estado-api { margin-left: auto; font-size: .85rem; color: var(--tenue); }
+  #estado-api.ok::before { content: "● "; color: var(--acento-2); }
+  #estado-api.mal::before { content: "● "; color: var(--peligro); }
+
+  main {
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(400px, 560px);
+    gap: 16px; padding: 16px 24px; height: calc(100vh - 62px);
+  }
+  @media (max-width: 1000px) {
+    main { grid-template-columns: 1fr; height: auto; }
+    #mapa-caja { height: 70vh; }
+  }
+
+  /* ---------- Mapa ---------- */
+  #mapa-caja {
+    position: relative; background: var(--superficie); border: 1px solid var(--borde);
+    border-radius: var(--radio); overflow: hidden; min-height: 0;
+  }
+  #mapa { width: 100%; height: 100%; display: block; }
+  .calle line { stroke: var(--calle); stroke-width: 3; stroke-linecap: round; }
+  .calle text { fill: var(--tenue); font-size: 15px; font-family: var(--mono); text-anchor: middle; dominant-baseline: central; }
+  .calle rect { fill: var(--superficie); }
+  .calle.camino line { stroke: var(--acento); stroke-width: 6; }
+  .calle.camino text { fill: var(--acento); font-weight: 700; }
+  .calle.arbol line { stroke: var(--acento-2); stroke-width: 6; }
+  .calle.arbol text { fill: var(--acento-2); font-weight: 700; }
+  .calle.descartada line { stroke: var(--peligro); stroke-dasharray: 8 7; stroke-width: 3; }
+  .calle.descartada text { fill: var(--peligro); font-weight: 700; }
+  .atenuado .calle:not(.camino):not(.arbol):not(.descartada) { opacity: .35; }
+
+  .lugar { cursor: default; }
+  .lugar .forma { stroke: var(--bg); stroke-width: 2.5; transition: transform .2s; }
+  .lugar .nombre { fill: var(--texto); font-size: 17px; font-weight: 600; paint-order: stroke; stroke: var(--superficie); stroke-width: 4px; stroke-linejoin: round; }
+  .lugar .codigo { fill: var(--tenue); font-size: 12px; font-family: var(--mono); paint-order: stroke; stroke: var(--superficie); stroke-width: 4px; }
+  .lugar .halo { fill: none; stroke: transparent; stroke-width: 3; }
+  .lugar.marcado .halo { stroke: var(--visita); }
+  .lugar.extremo .halo { stroke: var(--acento); stroke-width: 4; }
+  .lugar.con-item .halo { stroke: var(--acento); stroke-dasharray: 4 3; }
+  .lugar .orden circle { fill: var(--visita); stroke: var(--bg); stroke-width: 2; }
+  .lugar .orden text { fill: #0b1220; font-size: 14px; font-weight: 800; text-anchor: middle; dominant-baseline: central; }
+  .atenuado .lugar:not(.marcado):not(.extremo):not(.con-item) { opacity: .55; }
+
+  #leyenda {
+    position: absolute; left: 12px; bottom: 12px; display: flex; gap: 14px; flex-wrap: wrap;
+    background: rgba(14,17,22,.85); border: 1px solid var(--borde); border-radius: 8px;
+    padding: 6px 12px; font-size: .82rem; color: var(--tenue);
+  }
+  #leyenda span { display: inline-flex; align-items: center; gap: 6px; }
+  #leyenda i { width: 11px; height: 11px; border-radius: 3px; display: inline-block; }
+
+  /* ---------- Panel ---------- */
+  #panel {
+    display: flex; flex-direction: column; min-height: 0;
+    background: var(--superficie); border: 1px solid var(--borde); border-radius: var(--radio);
+  }
+  #pestanas {
+    display: flex; flex-wrap: wrap; gap: 6px; padding: 12px; border-bottom: 1px solid var(--borde);
+  }
+  #pestanas button {
+    background: var(--superficie-2); color: var(--tenue); border: 1px solid var(--borde);
+    border-radius: 999px; padding: 6px 12px; font: inherit; font-size: .88rem; cursor: pointer;
+  }
+  #pestanas button:hover { color: var(--texto); }
+  #pestanas button.activa { background: var(--acento); color: #1a1405; border-color: var(--acento); font-weight: 700; }
+  .seccion { display: none; padding: 16px; overflow-y: auto; flex: 1; min-height: 0; }
+  .seccion.activa { display: block; }
+  .seccion h2 { margin: 0 0 4px; font-size: 1.15rem; }
+  .seccion p.ayuda { margin: 0 0 14px; color: var(--tenue); font-size: .92rem; }
+
+  .controles { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin-bottom: 14px; }
+  .controles label { display: flex; flex-direction: column; gap: 4px; font-size: .8rem; color: var(--tenue); }
+  select, input[type=number] {
+    background: var(--bg); color: var(--texto); border: 1px solid var(--borde); border-radius: 8px;
+    padding: 7px 9px; font: inherit; font-size: .95rem; min-width: 0;
+  }
+  input[type=number] { width: 96px; }
+  button.accion {
+    background: var(--acento); color: #1a1405; border: 0; border-radius: 8px; padding: 8px 14px;
+    font: inherit; font-weight: 700; cursor: pointer;
+  }
+  button.secundaria {
+    background: transparent; color: var(--acento); border: 1px solid var(--acento); border-radius: 8px;
+    padding: 7px 12px; font: inherit; font-size: .9rem; cursor: pointer;
+  }
+  button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; }
+
+  .resultado { display: flex; flex-direction: column; gap: 12px; }
+  .error {
+    border: 1px solid var(--peligro); background: rgba(248,113,113,.08); color: #fecaca;
+    border-radius: 8px; padding: 10px 12px; font-size: .95rem;
+  }
+  .error b { color: var(--peligro); }
+  .cifras { display: flex; gap: 10px; flex-wrap: wrap; }
+  .cifra { background: var(--superficie-2); border: 1px solid var(--borde); border-radius: 8px; padding: 8px 12px; min-width: 110px; }
+  .cifra small { display: block; color: var(--tenue); font-size: .76rem; text-transform: uppercase; letter-spacing: .5px; }
+  .cifra b { font-size: 1.45rem; font-variant-numeric: tabular-nums; }
+  .cifra.destacada b { color: var(--acento); }
+  .cifra.verde b { color: var(--acento-2); }
+  .nota { font-size: .9rem; color: var(--tenue); border-left: 3px solid var(--acento); padding: 4px 10px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { background: var(--superficie-2); border: 1px solid var(--borde); border-radius: 999px; padding: 3px 10px; font-size: .88rem; }
+  .chip b { color: var(--visita); margin-right: 4px; font-variant-numeric: tabular-nums; }
+
+  ol.lista { margin: 0; padding-left: 22px; }
+  ol.lista li { padding: 3px 0; font-variant-numeric: tabular-nums; }
+  ol.lista li.nueva { color: var(--acento-2); }
+
+  .rutas { display: flex; flex-direction: column; gap: 6px; }
+  .rutas button {
+    text-align: left; background: var(--superficie-2); color: var(--texto); border: 1px solid var(--borde);
+    border-radius: 8px; padding: 8px 10px; font: inherit; font-size: .92rem; cursor: pointer;
+    display: flex; justify-content: space-between; gap: 10px;
+  }
+  .rutas button.activa { border-color: var(--acento); box-shadow: inset 3px 0 0 var(--acento); }
+  .rutas button span:last-child { color: var(--acento); font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+  .barras { display: flex; flex-direction: column; gap: 8px; }
+  .barra { display: grid; grid-template-columns: 130px 1fr 70px; gap: 8px; align-items: center; font-size: .9rem; }
+  .barra .pista { background: var(--bg); border-radius: 6px; height: 22px; overflow: hidden; position: relative; }
+  .barra .relleno { height: 100%; background: var(--visita); border-radius: 6px; transition: width .6s ease; }
+  .barra .relleno.acento { background: var(--acento); }
+  .barra .relleno.verde { background: var(--acento-2); }
+  .barra .num { text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; }
+
+  .columnas { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .tarjeta { background: var(--superficie-2); border: 1px solid var(--borde); border-radius: 8px; padding: 10px 12px; }
+  .tarjeta h3 { margin: 0 0 6px; font-size: .95rem; }
+  .tarjeta.ganadora { border-color: var(--acento-2); }
+  .tarjeta ul { margin: 6px 0; padding-left: 18px; font-size: .9rem; }
+  .total { font-size: 1.6rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .tarjeta.ganadora .total { color: var(--acento-2); }
+  .ocupacion { height: 8px; background: var(--bg); border-radius: 4px; overflow: hidden; margin-top: 6px; }
+  .ocupacion div { height: 100%; background: var(--acento); }
+
+  .sobreviviente { display: grid; grid-template-columns: 120px 1fr 52px; gap: 8px; align-items: center; font-size: .88rem; }
+  .carga { position: relative; display: flex; height: 30px; background: var(--bg); border-radius: 6px; overflow: visible; }
+  .carga .pieza {
+    height: 100%; border-right: 2px solid var(--bg); display: flex; align-items: center; justify-content: center;
+    font-size: .72rem; color: #0b1220; font-weight: 700; overflow: hidden; white-space: nowrap;
+  }
+  .carga .cota { position: absolute; top: -4px; bottom: -4px; border-left: 2px dashed var(--acento); }
+
+  table { border-collapse: collapse; width: 100%; font-size: .9rem; font-variant-numeric: tabular-nums; }
+  th, td { padding: 6px 8px; border-bottom: 1px solid var(--borde); text-align: left; }
+  th { color: var(--tenue); font-weight: 600; font-size: .8rem; text-transform: uppercase; letter-spacing: .4px; }
+  td.num, th.num { text-align: right; }
+  table.matriz { font-size: .74rem; font-family: var(--mono); }
+  table.matriz th, table.matriz td { padding: 3px 4px; text-align: center; border: 1px solid var(--bg); }
+  table.matriz td { cursor: pointer; color: #0b1220; font-weight: 600; }
+  table.matriz td:hover { outline: 2px solid var(--acento); }
+  table.matriz td.diag { background: var(--superficie-2) !important; color: var(--tenue); cursor: default; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Apocalipsis zombie en <span>CABA</span> — TPO Programación III</h1>
+  <div class="sub">Nodos: refugios y puntos reales · Aristas: calles a pie · Costo: minutos</div>
+  <div id="estado-api">Conectando…</div>
+</header>
+
+<main>
+  <section id="mapa-caja" aria-label="Mapa de CABA">
+    <svg id="mapa" role="img" aria-label="Grafo de lugares y calles de CABA"></svg>
+    <div id="leyenda">
+      <span><i style="background:var(--refugio)"></i>Refugio</span>
+      <span><i style="background:var(--hospital)"></i>Hospital</span>
+      <span><i style="background:var(--estacion)"></i>Estación</span>
+      <span><i style="background:var(--punto)"></i>Punto</span>
+      <span id="leyenda-extra"></span>
+    </div>
+  </section>
+
+  <section id="panel">
+    <nav id="pestanas" aria-label="Algoritmos">
+      <button data-tab="recorridos" class="activa">BFS / DFS</button>
+      <button data-tab="caminos">Dijkstra / Floyd</button>
+      <button data-tab="mst">Prim / Kruskal</button>
+      <button data-tab="floyd">Floyd vs Dijkstra</button>
+      <button data-tab="rutas">Backtracking</button>
+      <button data-tab="mochila">Mochila</button>
+      <button data-tab="reparto">Branch &amp; Bound</button>
+      <button data-tab="orden">Ordenamiento</button>
+    </nav>
+
+    <!-- BFS / DFS -->
+    <div class="seccion activa" id="tab-recorridos">
+      <h2>Recorridos: BFS y DFS</h2>
+      <p class="ayuda">¿Qué refugios son alcanzables a pie desde un punto? BFS descubre por niveles (cola, marca al encolar); DFS avanza lo más lejos posible y retrocede.</p>
+      <div class="controles">
+        <label>Origen <select class="sel-lugar" id="rec-origen" data-default="RET"></select></label>
+        <button class="accion" onclick="correrRecorrido('bfs')">BFS</button>
+        <button class="accion" onclick="correrRecorrido('dfs')">DFS</button>
+      </div>
+      <div class="resultado" id="res-recorridos"></div>
+    </div>
+
+    <!-- Dijkstra / Floyd camino -->
+    <div class="seccion" id="tab-caminos">
+      <h2>Ruta más rápida</h2>
+      <p class="ayuda">Dijkstra (cola de prioridad, relajación) o Floyd-Warshall (matriz siguiente). Deberían coincidir.</p>
+      <div class="controles">
+        <label>Origen <select class="sel-lugar" id="cam-origen" data-default="PAL"></select></label>
+        <label>Destino <select class="sel-lugar" id="cam-destino" data-default="CUN"></select></label>
+        <button class="accion" onclick="correrCamino('dijkstra')">Dijkstra</button>
+        <button class="accion" onclick="correrCamino('floyd/camino')">Floyd</button>
+        <button class="secundaria" onclick="casoPalCun()">Caso PAL → CUN</button>
+      </div>
+      <div class="resultado" id="res-caminos"></div>
+    </div>
+
+    <!-- Prim / Kruskal -->
+    <div class="seccion" id="tab-mst">
+      <h2>Árbol de recubrimiento mínimo</h2>
+      <p class="ayuda">Mínimo de minutos de calles a despejar para conectar todos los refugios. Prim crece un árbol desde un origen; Kruskal ordena las calles (MergeSort) y usa Union-Find.</p>
+      <div class="controles">
+        <label>Origen (Prim) <select class="sel-lugar" id="mst-origen" data-default="RET"></select></label>
+        <button class="accion" onclick="correrMst('prim')">Prim</button>
+        <button class="accion" onclick="correrMst('kruskal')">Kruskal</button>
+      </div>
+      <div class="resultado" id="res-mst"></div>
+    </div>
+
+    <!-- Floyd comparacion + matriz -->
+    <div class="seccion" id="tab-floyd">
+      <h2>Floyd-Warshall vs. Dijkstra V veces</h2>
+      <p class="ayuda">Todos los pares: Floyd hace V³ relajaciones; Dijkstra desde cada vértice expande hasta V² nodos y mira hasta V·2E aristas (exactamente eso si el grafo es conexo). Hacé clic en una celda de la tabla para ver el camino.</p>
+      <div class="controles">
+        <button class="accion" onclick="correrFloydComparacion()">Comparar y ver tabla</button>
+      </div>
+      <div class="resultado" id="res-floyd"></div>
+    </div>
+
+    <!-- Backtracking -->
+    <div class="seccion" id="tab-rutas">
+      <h2>Rutas de escape (Backtracking)</h2>
+      <p class="ayuda">Todas las rutas simples con tiempo y tramos acotados. La poda por viabilidad corta la rama apenas se pasa de un límite.</p>
+      <div class="controles">
+        <label>Origen <select class="sel-lugar" id="bt-origen" data-default="RET"></select></label>
+        <label>Destino <select class="sel-lugar" id="bt-destino" data-default="CUN"></select></label>
+        <label>Costo máx. (min) <input type="number" id="bt-costo" value="150" min="0" step="1"></label>
+        <label>Saltos máx. <input type="number" id="bt-saltos" value="4" min="0" step="1"></label>
+        <button class="accion" onclick="correrRutas()">Buscar rutas</button>
+      </div>
+      <div class="resultado" id="res-rutas"></div>
+    </div>
+
+    <!-- Mochila -->
+    <div class="seccion" id="tab-mochila">
+      <h2>Mochila: greedy vs. programación dinámica</h2>
+      <p class="ayuda">Qué suministros llevar sin pasarse de los kg. Greedy por ratio utilidad/kg no garantiza el óptimo en la 0/1; la PD sí.</p>
+      <div class="controles">
+        <label>Capacidad (kg) <input type="number" id="mo-capacidad" value="12" min="0" step="1"></label>
+        <button class="accion" onclick="correrMochila()">Comparar</button>
+        <button class="secundaria" onclick="casoMochila12()">Caso 12 kg</button>
+      </div>
+      <div class="resultado" id="res-mochila"></div>
+    </div>
+
+    <!-- Branch & Bound -->
+    <div class="seccion" id="tab-reparto">
+      <h2>Reparto entre sobrevivientes (Branch &amp; Bound)</h2>
+      <p class="ayuda">Repartir todos los suministros entre k sobrevivientes minimizando la carga máxima. Cota optimista: max(carga actual, total / min(k, n)).</p>
+      <div class="controles">
+        <label>Sobrevivientes (k) <input type="number" id="bb-k" value="3" min="1" step="1"></label>
+        <button class="accion" onclick="correrReparto()">Repartir</button>
+      </div>
+      <div class="resultado" id="res-reparto"></div>
+    </div>
+
+    <!-- Ordenamiento -->
+    <div class="seccion" id="tab-orden">
+      <h2>Ordenamiento de suministros</h2>
+      <p class="ayuda">QuickSort (Lomuto, pivote del medio, no estable) y MergeSort (estable, O(n log n) siempre).</p>
+      <div class="controles">
+        <label>Algoritmo
+          <select id="or-algoritmo"><option value="quicksort">QuickSort</option><option value="mergesort">MergeSort</option></select>
+        </label>
+        <label>Criterio
+          <select id="or-criterio"><option value="ratio">ratio</option><option value="valor">valor</option><option value="peso">peso</option></select>
+        </label>
+        <label>Orden
+          <select id="or-orden"><option value="asc">asc</option><option value="desc">desc</option></select>
+        </label>
+        <button class="accion" onclick="correrOrden()">Ordenar</button>
+      </div>
+      <div class="resultado" id="res-orden"></div>
+    </div>
+  </section>
+</main>
+
+<script>
+"use strict";
+
+/* =====================================================================
+ * Presentacion: coordenadas aproximadas (lat, lon) de cada lugar.
+ * Solo sirven para dibujar. Un id que no este aca se ubica cerca de sus
+ * vecinos (o abajo si no tiene), asi un refugio nuevo igual aparece.
+ * MON y CUN estan apenas separados de su posicion real para que se lean.
+ * ===================================================================== */
+const COORDENADAS = {
+  ABA: [-34.6037, -58.4108], CON: [-34.6276, -58.3815], CUN: [-34.5395, -58.4395],
+  HIT: [-34.6066, -58.4210], LBO: [-34.6394, -58.3627], MON: [-34.5465, -58.4510],
+  OBE: [-34.6037, -58.3816], PAL: [-34.5810, -58.4210], PCE: [-34.6065, -58.4357],
+  PMA: [-34.6110, -58.3630], REC: [-34.5875, -58.3930], RET: [-34.5915, -58.3745]
+};
+/* Donde va el nombre respecto del nodo (para que no se pisen). Default: abajo. */
+const POSICION_ETIQUETA = { MON: "izq", CUN: "der", HIT: "abajo", PCE: "izq", RET: "der", PMA: "der", LBO: "der", OBE: "arriba", REC: "arriba", PAL: "arriba", ABA: "der", CON: "abajo" };
+
+const COLOR_TIPO = { REFUGIO: "var(--refugio)", HOSPITAL: "var(--hospital)", ESTACION: "var(--estacion)", PUNTO: "var(--punto)" };
+const SVG_NS = "http://www.w3.org/2000/svg";
+const PASO_ANIMACION_MS = 450;
+
+let mapa = null;          // respuesta de /api/mapa
+let pos = {};             // id -> {x, y} en el SVG
+let nombrePorId = {};     // id -> nombre
+let animacion = 0;        // se incrementa para cancelar animaciones en curso
+let matrizFloyd = null;   // ultima respuesta de /api/grafo/floyd
+
+/* ---------------------------- Utilidades ---------------------------- */
+
+/** GET a la API. Si la respuesta es un error {estado, detalle}, lanza Error(detalle). */
+async function api(url) {
+  let r;
+  try {
+    r = await fetch(url, { headers: { Accept: "application/json" } });
+  } catch (e) {
+    throw new Error("No hay conexión con la aplicación. ¿Está corriendo el backend?");
+  }
+  const cuerpo = await r.json().catch(() => null);
+  if (!r.ok) {
+    const detalle = cuerpo && cuerpo.detalle ? cuerpo.detalle : "Error HTTP " + r.status;
+    throw new Error(detalle + " (HTTP " + r.status + ")");
+  }
+  return cuerpo;
+}
+
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+function nombre(id) { return nombrePorId[id] || id; }
+function fmt(n) { return Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/\.?0+$/, ""); }
+function $(id) { return document.getElementById(id); }
+function dormir(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function mostrar(idResultado, html) { $(idResultado).innerHTML = html; }
+function mostrarError(idResultado, e) {
+  mostrar(idResultado, `<div class="error"><b>No se pudo calcular.</b> ${esc(e.message)}</div>`);
+}
+function cifra(etiqueta, valor, clase = "") {
+  return `<div class="cifra ${clase}"><small>${esc(etiqueta)}</small><b>${esc(valor)}</b></div>`;
+}
+function barra(etiqueta, valor, maximo, clase = "") {
+  const ancho = maximo > 0 ? Math.max(1, 100 * valor / maximo) : 0;
+  return `<div class="barra"><span>${esc(etiqueta)}</span>
+    <div class="pista"><div class="relleno ${clase}" style="width:${ancho}%"></div></div>
+    <span class="num">${esc(fmt(valor))}</span></div>`;
+}
+function rutaTexto(vertices) { return vertices.map(esc).join(" → "); }
+
+/* ------------------------- Dibujo del mapa -------------------------- */
+
+/** Proyecta lat/lon a coordenadas del SVG manteniendo la proporcion real. */
+function calcularPosiciones(lugares, calles) {
+  const conocidos = lugares.filter(l => COORDENADAS[l.id]);
+  if (conocidos.length === 0) {
+    // ningun id con coordenadas: lienzo fijo y grilla de 4 columnas (evita NaN)
+    const p = {}, ancho = 760, alto = 900;
+    lugares.forEach((l, i) => p[l.id] = { x: 110 + (i % 4) * 180, y: 110 + Math.floor(i / 4) * 160 });
+    return { p, ancho, alto };
+  }
+  const lats = conocidos.map(l => COORDENADAS[l.id][0]);
+  const lons = conocidos.map(l => COORDENADAS[l.id][1]);
+  const latMin = Math.min(...lats), latMax = Math.max(...lats);
+  const lonMin = Math.min(...lons), lonMax = Math.max(...lons);
+  const factorLon = Math.cos((latMin + latMax) / 2 * Math.PI / 180);
+  const ancho = 760, margen = 90;
+  const escala = (ancho - 2 * margen) / ((lonMax - lonMin) * factorLon || 1);
+  const alto = Math.round((latMax - latMin) * escala + 2 * margen + 40);
+
+  const p = {};
+  for (const l of conocidos) {
+    const [lat, lon] = COORDENADAS[l.id];
+    p[l.id] = { x: margen + (lon - lonMin) * factorLon * escala, y: margen + (latMax - lat) * escala };
+  }
+  ubicarSinCoordenadas(lugares, calles, p, ancho, alto);
+  return { p, ancho, alto };
+}
+
+/** Fallback: un lugar sin coordenadas va al promedio de sus vecinos (desplazado) o abajo. */
+function ubicarSinCoordenadas(lugares, calles, p, ancho, alto) {
+  let sueltos = 0;
+  lugares.filter(l => !p[l.id]).forEach((l, i) => {
+    const vecinos = calles.filter(c => c.origen === l.id || c.destino === l.id)
+      .map(c => c.origen === l.id ? c.destino : c.origen).filter(v => p[v]);
+    if (vecinos.length) {
+      const x = vecinos.reduce((s, v) => s + p[v].x, 0) / vecinos.length;
+      const y = vecinos.reduce((s, v) => s + p[v].y, 0) / vecinos.length;
+      const ang = (i * 137.5) * Math.PI / 180;
+      p[l.id] = { x: x + 70 * Math.cos(ang), y: y + 70 * Math.sin(ang) };
+    } else {
+      p[l.id] = { x: 70 + (sueltos++ % 8) * 85, y: alto - 40 };
+    }
+  });
+}
+
+function el(tag, attrs, padre) {
+  const e = document.createElementNS(SVG_NS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (padre) padre.appendChild(e);
+  return e;
+}
+function claveCalle(a, b) { return a < b ? a + "|" + b : b + "|" + a; }
+
+/** Forma por tipo: casa (refugio), cruz (hospital), cuadrado (estacion), rombo (punto). */
+function dibujarForma(g, tipo) {
+  const color = COLOR_TIPO[tipo] || "var(--punto)";
+  const attrs = { class: "forma", fill: color };
+  if (tipo === "REFUGIO") return el("path", { ...attrs, d: "M0,-17 L16,-3 L12,-3 L12,14 L-12,14 L-12,-3 L-16,-3 Z" }, g);
+  if (tipo === "HOSPITAL") return el("path", { ...attrs, d: "M-5,-15 H5 V-5 H15 V5 H5 V15 H-5 V5 H-15 V-5 H-5 Z" }, g);
+  if (tipo === "ESTACION") return el("rect", { ...attrs, x: -13, y: -13, width: 26, height: 26, rx: 5 }, g);
+  return el("path", { ...attrs, d: "M0,-16 L14,0 L0,16 L-14,0 Z" }, g);
+}
+
+function dibujarEtiqueta(g, l) {
+  const lado = POSICION_ETIQUETA[l.id] || "abajo";
+  const off = { abajo: [0, 38, "middle"], arriba: [0, -40, "middle"], izq: [-26, 5, "end"], der: [26, 5, "start"] }[lado];
+  const t = el("text", { class: "nombre", x: off[0], y: off[1], "text-anchor": off[2] }, g);
+  t.textContent = l.nombre;
+  const c = el("text", { class: "codigo", x: off[0], y: off[1] + 14, "text-anchor": off[2] }, g);
+  c.textContent = l.id + " · " + String(l.tipo || "punto").toLowerCase();
+}
+
+function dibujarMapa() {
+  const svg = $("mapa");
+  svg.innerHTML = "";
+  const { p, ancho, alto } = calcularPosiciones(mapa.lugares, mapa.calles);
+  pos = p;
+  svg.setAttribute("viewBox", `0 0 ${ancho} ${alto}`);
+  svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+
+  const capaCalles = el("g", { id: "capa-calles" }, svg);
+  for (const c of mapa.calles) {
+    const a = pos[c.origen], b = pos[c.destino];
+    const g = el("g", { class: "calle", id: "calle-" + claveCalle(c.origen, c.destino) }, capaCalles);
+    el("line", { x1: a.x, y1: a.y, x2: b.x, y2: b.y }, g);
+    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    const txt = fmt(c.costo);
+    el("rect", { x: mx - 5 - txt.length * 4.5, y: my - 10, width: 10 + txt.length * 9, height: 20, rx: 4 }, g);
+    el("text", { x: mx, y: my }, g).textContent = txt;
+  }
+
+  const capaLugares = el("g", { id: "capa-lugares" }, svg);
+  for (const l of mapa.lugares) {
+    const g = el("g", { class: "lugar", id: "lugar-" + l.id, transform: `translate(${pos[l.id].x},${pos[l.id].y})` }, capaLugares);
+    el("circle", { class: "halo", r: 23 }, g);
+    dibujarForma(g, l.tipo);
+    dibujarEtiqueta(g, l);
+    el("title", {}, g).textContent = `${l.nombre} (${l.id}) — ${l.tipo}, capacidad ${fmt(l.valor)} personas`;
+  }
+}
+
+/* ------------------------ Resaltado del mapa ------------------------ */
+
+/** Deja el mapa limpio y cancela cualquier animacion en curso. */
+function limpiarMapa() {
+  animacion++;
+  const svg = $("mapa");
+  svg.classList.remove("atenuado");
+  svg.querySelectorAll(".calle").forEach(e => e.classList.remove("camino", "arbol", "descartada"));
+  svg.querySelectorAll(".lugar").forEach(e => e.classList.remove("marcado", "extremo", "con-item"));
+  svg.querySelectorAll(".lugar .orden").forEach(e => e.remove());
+  $("leyenda-extra").textContent = "";
+}
+function marcarCalle(a, b, clase) {
+  const e = $("calle-" + claveCalle(a, b));
+  if (e) e.classList.add(clase);
+}
+function marcarLugar(id, clase) {
+  const e = $("lugar-" + id);
+  if (e) e.classList.add(clase);
+}
+function numerarLugar(id, numero) {
+  const g = $("lugar-" + id);
+  if (!g) return;
+  // el numero va sobre el nodo: la forma queda como borde de color
+  const o = el("g", { class: "orden" }, g);
+  el("circle", { r: 13 }, o);
+  el("text", {}, o).textContent = numero;
+}
+/** Resalta un camino (lista de ids consecutivos) y sus extremos. */
+function resaltarCamino(vertices) {
+  $("mapa").classList.add("atenuado");
+  for (let i = 0; i + 1 < vertices.length; i++) marcarCalle(vertices[i], vertices[i + 1], "camino");
+  vertices.forEach(id => marcarLugar(id, "marcado"));
+  marcarLugar(vertices[0], "extremo");
+  marcarLugar(vertices[vertices.length - 1], "extremo");
+}
+
+/* ============================ Algoritmos ============================ */
+
+/** BFS / DFS: numera los lugares en el orden de visita, uno por paso. */
+async function correrRecorrido(tipo) {
+  limpiarMapa();
+  const origen = $("rec-origen").value;
+  try {
+    const orden = await api(`/api/grafo/${tipo}?origen=${encodeURIComponent(origen)}`);
+    mostrar("res-recorridos", `
+      <div class="cifras">${cifra("Algoritmo", tipo.toUpperCase(), "destacada")}${cifra("Alcanzables", orden.length)}${cifra("Estructura", tipo === "bfs" ? "Cola FIFO" : "Pila (recursión)")}</div>
+      <div class="chips">${orden.map((id, i) => `<span class="chip"><b>${i + 1}</b>${esc(nombre(id))}</span>`).join("")}</div>
+      <div class="nota">${tipo === "bfs"
+        ? "Orden por niveles: primero los vecinos directos del origen, después los que están a 2 tramos, etc."
+        : "Avanza por el primer vecino no visitado y retrocede cuando no quedan vecinos nuevos."}</div>`);
+    await animarVisita(orden);
+  } catch (e) { mostrarError("res-recorridos", e); }
+}
+async function animarVisita(orden) {
+  const mio = animacion;
+  $("mapa").classList.add("atenuado");
+  marcarLugar(orden[0], "extremo");
+  for (let i = 0; i < orden.length; i++) {
+    if (mio !== animacion) return;
+    marcarLugar(orden[i], "marcado");
+    numerarLugar(orden[i], i + 1);
+    await dormir(PASO_ANIMACION_MS);
+  }
+}
+
+/** Dijkstra o Floyd (camino): resalta la ruta y muestra el costo. */
+async function correrCamino(endpoint) {
+  limpiarMapa();
+  const o = $("cam-origen").value, d = $("cam-destino").value;
+  try {
+    const r = await api(`/api/grafo/${endpoint}?origen=${encodeURIComponent(o)}&destino=${encodeURIComponent(d)}`);
+    resaltarCamino(r.vertices);
+    const directa = mapa.calles.find(c => claveCalle(c.origen, c.destino) === claveCalle(o, d));
+    const usaDirecta = r.vertices.length === 2;
+    if (directa && !usaDirecta) marcarCalle(o, d, "descartada");
+    $("leyenda-extra").textContent = directa && !usaDirecta ? "— rojo punteado: calle directa descartada" : "";
+    mostrar("res-caminos", `
+      <div class="cifras">
+        ${cifra("Algoritmo", endpoint === "dijkstra" ? "Dijkstra" : "Floyd")}
+        ${cifra("Costo total", fmt(r.costoTotal) + " min", "destacada")}
+        ${cifra("Tramos", r.vertices.length - 1)}
+        ${directa && !usaDirecta ? cifra("Calle directa", fmt(directa.costo) + " min") : ""}
+      </div>
+      <div><b>Ruta:</b> ${rutaTexto(r.vertices.map(nombre))}</div>
+      ${directa && !usaDirecta ? `<div class="nota">Existe la calle directa ${esc(o)} – ${esc(d)} de ${fmt(directa.costo)} min, pero la relajación encontró un camino más corto: ${fmt(r.costoTotal)} &lt; ${fmt(directa.costo)}.</div>` : ""}`);
+  } catch (e) { mostrarError("res-caminos", e); }
+}
+function casoPalCun() {
+  $("cam-origen").value = "PAL";
+  $("cam-destino").value = "CUN";
+  correrCamino("dijkstra");
+}
+
+/** Prim / Kruskal: agrega las calles del arbol en el orden en que las elige el algoritmo. */
+async function correrMst(tipo) {
+  limpiarMapa();
+  const url = tipo === "prim" ? `/api/grafo/prim?origen=${encodeURIComponent($("mst-origen").value)}` : "/api/grafo/kruskal";
+  try {
+    const r = await api(url);
+    mostrar("res-mst", `
+      <div class="cifras">
+        ${cifra("Algoritmo", tipo === "prim" ? "Prim" : "Kruskal")}
+        ${cifra("Calles", r.aristas.length, "verde")}
+        ${cifra("Costo total", fmt(r.costoTotal) + " min", "verde")}
+      </div>
+      <ol class="lista" id="mst-lista"></ol>
+      <div class="nota">${tipo === "prim"
+        ? "Prim agrega la calle más barata que conecta el árbol con un lugar nuevo (cola de prioridad por key)."
+        : "Kruskal recorre las calles de menor a mayor y descarta las que cierran un ciclo (find(u) = find(v))."}
+        Con costos todos distintos el MST es único; acá hay empates, pero igual Prim y Kruskal dan las mismas calles.</div>`);
+    await animarArbol(r.aristas);
+  } catch (e) { mostrarError("res-mst", e); }
+}
+async function animarArbol(aristas) {
+  const mio = animacion;
+  $("mapa").classList.add("atenuado");
+  const lista = $("mst-lista");
+  let acumulado = 0;
+  for (const a of aristas) {
+    if (mio !== animacion) return;
+    acumulado += a.costo;
+    marcarCalle(a.origen, a.destino, "arbol");
+    marcarLugar(a.origen, "marcado");
+    marcarLugar(a.destino, "marcado");
+    lista.querySelectorAll("li").forEach(li => li.classList.remove("nueva"));
+    lista.insertAdjacentHTML("beforeend",
+      `<li class="nueva">${esc(a.origen)} – ${esc(a.destino)}: ${fmt(a.costo)} min <span style="color:var(--tenue)">(acumulado ${fmt(acumulado)})</span></li>`);
+    await dormir(PASO_ANIMACION_MS);
+  }
+}
+
+/** Floyd vs Dijkstra: contadores + tabla de distancias de todos los pares. */
+async function correrFloydComparacion() {
+  limpiarMapa();
+  try {
+    const [c, m] = await Promise.all([api("/api/grafo/floyd/comparacion"), api("/api/grafo/floyd")]);
+    matrizFloyd = m;
+    const maximo = Math.max(c.operacionesFloyd, c.nodosExpandidosDijkstra, c.aristasExaminadasDijkstra);
+    mostrar("res-floyd", `
+      <div class="cifras">${cifra("V", c.vertices)}${cifra("V³", c.operacionesFloyd, "destacada")}</div>
+      <div class="barras">
+        ${barra("Floyd: relajaciones", c.operacionesFloyd, maximo, "acento")}
+        ${barra("Dijkstra: nodos", c.nodosExpandidosDijkstra, maximo)}
+        ${barra("Dijkstra: aristas", c.aristasExaminadasDijkstra, maximo)}
+      </div>
+      <div class="nota">Floyd: ${c.operacionesFloyd} = ${c.vertices}³ relajaciones, siempre. Dijkstra V veces: ${c.nodosExpandidosDijkstra} nodos expandidos
+        y ${c.aristasExaminadasDijkstra} aristas examinadas (si el grafo es conexo, V² y V·2E). En un grafo disperso conviene Dijkstra V veces; en uno denso, Floyd.</div>
+      ${tablaFloyd(m)}`);
+    conectarCeldasFloyd();
+  } catch (e) { mostrarError("res-floyd", e); }
+}
+function tablaFloyd(m) {
+  const ids = mapa.lugares.map(l => l.id);
+  const valores = Object.values(m).filter(v => v > 0);
+  const max = Math.max(1, ...valores);
+  let html = `<div style="overflow-x:auto"><table class="matriz"><tr><th></th>${ids.map(i => `<th>${esc(i)}</th>`).join("")}</tr>`;
+  for (const o of ids) {
+    html += `<tr><th>${esc(o)}</th>`;
+    for (const d of ids) {
+      const v = m[o + "->" + d];
+      if (o === d) { html += `<td class="diag">0</td>`; continue; }
+      if (v === undefined) { html += `<td class="diag">∞</td>`; continue; }
+      const t = v / max;  // de verde (cerca) a rojo (lejos)
+      const color = `hsl(${Math.round(150 - 150 * t)}, 65%, ${Math.round(70 - 15 * t)}%)`;
+      html += `<td style="background:${color}" title="${esc(o)} → ${esc(d)}: ${fmt(v)} min" data-origen="${esc(o)}" data-destino="${esc(d)}">${fmt(v)}</td>`;
+    }
+    html += `</tr>`;
+  }
+  return html + `</table></div><div id="floyd-camino"></div>`;
+}
+/** Clic en una celda de la tabla: muestra ese camino de Floyd en el mapa. */
+function conectarCeldasFloyd() {
+  document.querySelectorAll("table.matriz td[data-origen]").forEach(td =>
+    td.addEventListener("click", () => verCaminoFloyd(td.dataset.origen, td.dataset.destino)));
+}
+async function verCaminoFloyd(o, d) {
+  limpiarMapa();
+  try {
+    const r = await api(`/api/grafo/floyd/camino?origen=${encodeURIComponent(o)}&destino=${encodeURIComponent(d)}`);
+    resaltarCamino(r.vertices);
+    $("floyd-camino").innerHTML = `<div class="nota"><b>${esc(o)} → ${esc(d)}:</b> ${rutaTexto(r.vertices)} = <b>${fmt(r.costoTotal)} min</b></div>`;
+  } catch (e) { $("floyd-camino").innerHTML = `<div class="error">${esc(e.message)}</div>`; }
+}
+
+/** Backtracking: lista de rutas clickeables y nodos explorados con y sin poda. */
+let rutasActuales = [];
+async function correrRutas() {
+  limpiarMapa();
+  const q = new URLSearchParams({
+    origen: $("bt-origen").value, destino: $("bt-destino").value,
+    costoMaximo: $("bt-costo").value, saltosMaximos: $("bt-saltos").value
+  });
+  try {
+    const r = await api("/api/grafo/rutas?" + q);
+    rutasActuales = r.rutas;
+    const ahorro = r.nodosSinPoda > 0 ? Math.round(100 * (1 - r.nodosConPoda / r.nodosSinPoda)) : 0;
+    mostrar("res-rutas", `
+      <div class="cifras">${cifra("Rutas", r.rutas.length, "destacada")}${cifra("Ahorro de la poda", ahorro + " %", "verde")}</div>
+      <div class="barras">
+        ${barra("Nodos con poda", r.nodosConPoda, r.nodosSinPoda, "verde")}
+        ${barra("Nodos sin poda", r.nodosSinPoda, r.nodosSinPoda)}
+      </div>
+      ${r.rutas.length === 0 ? `<div class="nota">Ninguna ruta cumple los límites (no es un error).</div>` :
+        `<div class="rutas">${r.rutas.map((ruta, i) =>
+          `<button onclick="verRuta(${i})" id="ruta-${i}"><span>${i + 1}. ${rutaTexto(ruta.vertices)}</span><span>${fmt(ruta.costoTotal)} min</span></button>`).join("")}</div>`}
+      <div class="nota">Con y sin poda se encuentran las mismas rutas: la poda solo corta ramas que ya se pasaron del tiempo o de los tramos.</div>`);
+    if (r.rutas.length) verRuta(0);
+  } catch (e) { mostrarError("res-rutas", e); }
+}
+function verRuta(i) {
+  limpiarMapa();
+  resaltarCamino(rutasActuales[i].vertices);
+  document.querySelectorAll(".rutas button").forEach(b => b.classList.remove("activa"));
+  $("ruta-" + i).classList.add("activa");
+}
+
+/** Mochila: greedy por ratio vs. PD con la misma capacidad. */
+async function correrMochila() {
+  limpiarMapa();
+  const cap = $("mo-capacidad").value;
+  try {
+    const r = await api(`/api/seleccion/comparar?capacidad=${encodeURIComponent(cap)}`);
+    const g = r.greedy, d = r.dinamica;
+    const diferencia = d.valorTotal - g.valorTotal;
+    mostrar("res-mochila", `
+      <div class="columnas">
+        ${tarjetaMochila("Greedy (ratio)", g, cap, diferencia === 0)}
+        ${tarjetaMochila("Programación dinámica", d, cap, true)}
+      </div>
+      <div class="nota">${diferencia > 0
+        ? `Con ${esc(cap)} kg el greedy pierde <b>${fmt(diferencia)}</b> de utilidad: toma el mejor ratio y no reconsidera${g.pesoTotal < Number(cap) ? ", y le queda capacidad sin usar" : ""}.`
+        : `Con ${esc(cap)} kg el greedy coincide con el óptimo.`}
+        En el mapa: lugares donde están los suministros elegidos por la PD.</div>`);
+    $("mapa").classList.add("atenuado");
+    d.elegidos.forEach(it => marcarLugar(it.nodoId, "con-item"));
+  } catch (e) { mostrarError("res-mochila", e); }
+}
+function tarjetaMochila(titulo, res, cap, ganadora) {
+  const ocupacion = cap > 0 ? Math.min(100, 100 * res.pesoTotal / cap) : 0;
+  return `<div class="tarjeta ${ganadora ? "ganadora" : ""}">
+    <h3>${esc(titulo)}</h3>
+    <div class="total">${fmt(res.valorTotal)}</div>
+    <small style="color:var(--tenue)">utilidad · ${fmt(res.pesoTotal)} de ${esc(cap)} kg</small>
+    <div class="ocupacion"><div style="width:${ocupacion}%"></div></div>
+    <ul>${res.elegidos.map(it => `<li>${esc(it.nombre)} <span style="color:var(--tenue)">${fmt(it.peso)} kg · ${fmt(it.valor)}</span></li>`).join("") || "<li>Nada</li>"}</ul>
+  </div>`;
+}
+function casoMochila12() {
+  $("mo-capacidad").value = 12;
+  correrMochila();
+}
+
+/** Branch & Bound: una fila por sobreviviente con su carga, la cota y los contadores. */
+const COLORES_ITEM = ["#60a5fa", "#34d399", "#fbbf24", "#f87171", "#a78bfa", "#2dd4bf", "#fb923c", "#f472b6"];
+async function correrReparto() {
+  limpiarMapa();
+  const k = $("bb-k").value;
+  try {
+    const r = await api(`/api/seleccion/repartir?contenedores=${encodeURIComponent(k)}`);
+    const escala = Math.max(r.cargaMaxima, r.cotaInicial) || 1;
+    const filas = Object.entries(r.porContenedor).map(([quien, items]) => filaSobreviviente(quien, items, escala, r.cotaInicial)).join("");
+    mostrar("res-reparto", `
+      <div class="cifras">
+        ${cifra("Carga máxima", fmt(r.cargaMaxima) + " kg", "destacada")}
+        ${cifra("Cota inicial", fmt(r.cotaInicial) + " kg")}
+        ${cifra("Explorados", r.nodosExplorados, "verde")}
+        ${cifra("Podados", r.nodosPodados)}
+      </div>
+      <div class="barras">${filas}</div>
+      <div class="nota">La línea punteada es la cota optimista total / min(k, n). ${r.cargaMaxima === r.cotaInicial
+        ? "El reparto la alcanza: es óptimo y todo lo demás se poda."
+        : "La cota no siempre es alcanzable (pesos enteros): es optimista, nunca sobreestima."}</div>`);
+  } catch (e) { mostrarError("res-reparto", e); }
+}
+function filaSobreviviente(quien, items, escala, cota) {
+  const total = items.reduce((s, it) => s + it.peso, 0);
+  const piezas = items.map(it => {
+    const idx = (parseInt(String(it.id).replace(/\D/g, ""), 10) || 0) % COLORES_ITEM.length;
+    return `<div class="pieza" style="width:${100 * it.peso / escala}%;background:${COLORES_ITEM[idx]}" title="${esc(it.nombre)}: ${fmt(it.peso)} kg">${esc(it.id)}</div>`;
+  }).join("");
+  return `<div class="sobreviviente"><span>${esc(quien)}</span>
+    <div class="carga">${piezas}<div class="cota" style="left:${100 * cota / escala}%"></div></div>
+    <span class="num" style="text-align:right;font-weight:700">${fmt(total)} kg</span></div>`;
+}
+
+function notaOrden(alg, criterio) {
+  if (alg === "quicksort") return "QuickSort no es estable: los empatados pueden cambiar de orden relativo.";
+  return criterio === "peso"
+    ? "MergeSort es estable: Bate (S6) y Herramientas (S8) pesan 5 kg y S6 queda antes, como en la entrada."
+    : "MergeSort es estable: ante un empate respeta el orden de entrada.";
+}
+
+/** Ordenamiento: tabla de suministros ordenada por el criterio elegido. */
+async function correrOrden() {
+  limpiarMapa();
+  const alg = $("or-algoritmo").value, criterio = $("or-criterio").value, orden = $("or-orden").value;
+  try {
+    const lista = await api(`/api/seleccion/${alg}?criterio=${encodeURIComponent(criterio)}&orden=${encodeURIComponent(orden)}`);
+    const marca = col => col === criterio ? ' style="color:var(--acento)"' : "";
+    mostrar("res-orden", `
+      <div class="cifras">${cifra("Algoritmo", alg === "quicksort" ? "QuickSort" : "MergeSort")}${cifra("Criterio", criterio + " " + orden, "destacada")}</div>
+      <table>
+        <tr><th>#</th><th>Suministro</th><th class="num"${marca("peso")}>kg</th><th class="num"${marca("valor")}>Utilidad</th><th class="num"${marca("ratio")}>Ratio</th><th>Lugar</th></tr>
+        ${lista.map((it, i) => `<tr><td>${i + 1}</td><td>${esc(it.nombre)} <span style="color:var(--tenue)">${esc(it.id)}</span></td>
+          <td class="num">${fmt(it.peso)}</td><td class="num">${fmt(it.valor)}</td>
+          <td class="num">${it.peso > 0 ? (it.valor / it.peso).toFixed(2) : "—"}</td><td>${esc(it.nodoId || "")}</td></tr>`).join("")}
+      </table>
+      <div class="nota">${notaOrden(alg, criterio)}</div>`);
+  } catch (e) { mostrarError("res-orden", e); }
+}
+
+/* ============================== Arranque ============================== */
+
+function poblarSelectores() {
+  document.querySelectorAll(".sel-lugar").forEach(sel => {
+    sel.innerHTML = mapa.lugares.map(l => `<option value="${esc(l.id)}">${esc(l.id)} — ${esc(l.nombre)}</option>`).join("");
+    const preferido = sel.dataset.default;
+    if (mapa.lugares.some(l => l.id === preferido)) sel.value = preferido;
+  });
+}
+
+function activarPestanas() {
+  document.querySelectorAll("#pestanas button").forEach(b => b.addEventListener("click", () => {
+    document.querySelectorAll("#pestanas button").forEach(x => x.classList.toggle("activa", x === b));
+    document.querySelectorAll(".seccion").forEach(s => s.classList.toggle("activa", s.id === "tab-" + b.dataset.tab));
+    limpiarMapa();
+  }));
+}
+
+async function iniciar() {
+  activarPestanas();
+  const estado = $("estado-api");
+  try {
+    mapa = await api("/api/mapa");
+    mapa.lugares.forEach(l => nombrePorId[l.id] = l.nombre);
+    dibujarMapa();
+    poblarSelectores();
+    estado.textContent = `API ok · ${mapa.lugares.length} lugares · ${mapa.calles.length} calles`;
+    estado.className = "ok";
+  } catch (e) {
+    estado.textContent = "Sin API: " + e.message;
+    estado.className = "mal";
+    mostrarError("res-recorridos", e);
+  }
+}
+iniciar();
+</script>
+</body>
+</html>
