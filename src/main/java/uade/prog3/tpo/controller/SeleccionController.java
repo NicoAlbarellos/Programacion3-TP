@@ -81,9 +81,6 @@ public class SeleccionController {
     /** GET /api/seleccion/repartir?contenedores=3 */
     @GetMapping("/repartir")
     public RamificacionYPoda.Asignacion repartir(@RequestParam int contenedores) {
-        if (contenedores < 1) {
-            throw new IllegalArgumentException("La cantidad de contenedores debe ser al menos 1");
-        }
         return ramificacionYPoda.repartir(todos(), contenedores);
     }
 
