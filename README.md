@@ -254,7 +254,48 @@ aristas por id (`ORDER BY`), así que los recorridos son deterministas.
 
 ---
 
-## Uso de IA
+## Cómo agregar un refugio
+Es la modificación más común sobre el mapa. Todos los datos del dominio están en un solo archivo,
+src/main/java/uade/prog3/tpo/seed/DominioCaba.java, que usan tanto la carga en Neo4j como los tests.
+1. *Agregar el lugar* en LUGARES, respetando el orden alfabético por id. El id no se puede
+   repetir; el tipo es REFUGIO, HOSPITAL, ESTACION o PUNTO, y el último número es la
+   capacidad en personas. Por ejemplo, entre ABA y CON:
+   java
+   new Lugar("BEL", "Barrancas de Belgrano", "REFUGIO", 300),
+   
+2. *Agregar sus calles* en CALLES, *una sola vez* cada una: el grafo es no dirigido y la
+   vuelta se agrega sola al cargarlo en memoria. Solo se conectan lugares vecinos, con el costo en
+   minutos a pie (≈12 min/km) y siempre positivo. La lista tiene que quedar **ordenada por origen y
+   después por destino**, que es el orden del ORDER BY de GrafoService: así los tests ven las
+   mismas listas de adyacencia que la aplicación. Por ejemplo, entre ABA – REC y CON – ABA:
+   java
+   new Calle("BEL", "MON", 20),
+   
+   Los dos ids de la calle tienen que existir en LUGARES (lo controla DominioCabaTest).
+3. *Recargar la base.* La carga inicial solo corre si la base está vacía, así que hay que
+   borrarla y volver a arrancar la aplicación:
+   bash
+   docker compose down -v
+   docker compose up -d
+   
+   Al arrancar, el log tiene que decir Carga inicial completada: 13 lugares de CABA, 22 calles, 8 suministros.
+4. *Actualizar los tests con valores fijos.* ./mvnw test va a fallar en los tests que tienen
+   resultados calculados a mano sobre el mapa de 12 lugares. Probando con BEL – MON (20 min)
+   fallan 16 tests en 5 clases:
+   | Clase | Tests | Qué hay que recalcular |
+   |---|---|---|
+   | RecorridosTest | bfsDominioDesdeRetiro, dfsDominioDesdeRetiro, dominioTiene12VerticesY21Aristas | Orden de visita y cantidad de vértices y aristas |
+   | DominioCabaTest | tieneDoceLugaresVeintiunCallesYOchoSuministros | Cantidad de lugares y calles |
+   | ArbolRecubrimientoTest | primDominioDesdeRetiro, primDominioDaElMismoArbolDesdeOtroOrigen, kruskalDominio | Aristas del árbol (V − 1) y costo total (si el refugio tiene una sola calle, 287 + esa calle) |
+   | FloydWarshallTest | dominioTieneTodosLosParesYDiagonalCero, sumaDeTodasLasDistancias, comparacionConDijkstraEnElDominio | Cantidad de pares (V²) y suma de todas las distancias |
+   | BacktrackingTest | retiroCiudadUniversitaria150Minutos4Saltos, retiroCiudadUniversitaria130Minutos, constitucionParqueCentenario, obeliscoHospitalItaliano, sinRutasValidas, limitesHolgadosDanTodosLosCaminosSimples | Nodos explorados con y sin poda |
+   Si la calle nueva acorta algún camino, también cambian las rutas de Dijkstra
+   (CaminosMinimosTest) y de Backtracking. Los tests de ordenamiento, mochila y Branch & Bound no
+   cambian: dependen de los suministros, no del mapa.
+5. *Actualizar la documentación:* las tablas de lugares y calles y el diagrama de este README, y
+   los resultados esperados en docs/VERIFICACIONES.md y docs/api.http.
+
+   ## Uso de IA
 
 Usamos **Claude Code (Anthropic)** como asistente durante el trabajo, para:
 
