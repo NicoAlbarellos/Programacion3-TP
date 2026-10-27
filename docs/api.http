@@ -16,6 +16,17 @@ GET http://localhost:8080/api/grafo/floyd/camino?origen=LBO&destino=CUN
 GET http://localhost:8080/api/grafo/floyd/comparacion
 GET http://localhost:8080/api/grafo/ucs?origen=RET&destino=CUN
 
+### Lugares infectados    (esperado: MON infectado -> PAL,CUN directo = 90)
+GET http://localhost:8080/api/grafo/dijkstra?origen=PAL&destino=CUN&infectados=MON
+### (esperado: sin CON ni ABA -> LBO,PMA,RET,PAL,HIT = 120)
+GET http://localhost:8080/api/grafo/dijkstra?origen=LBO&destino=HIT&infectados=CON,ABA
+### (esperado: 422 "No hay camino de RET a CUN": sin PAL, {MON, CUN} queda aislado)
+GET http://localhost:8080/api/grafo/dijkstra?origen=RET&destino=CUN&infectados=PAL
+### (esperado: 400 "El origen PAL esta infectado: no se puede usar")
+GET http://localhost:8080/api/grafo/dijkstra?origen=PAL&destino=CUN&infectados=MON,PAL
+### (esperado: 2 rutas RET-PAL-CUN 135 y RET-PAL-MON-CUN 129, 57 nodos con poda / 212 sin poda)
+GET http://localhost:8080/api/grafo/rutas?origen=RET&destino=CUN&costoMaximo=150&saltosMaximos=4&infectados=REC
+
 ### Árbol de recubrimiento mínimo    (esperado: 11 aristas, costo total 287)
 GET http://localhost:8080/api/grafo/prim?origen=RET
 GET http://localhost:8080/api/grafo/kruskal

@@ -19,6 +19,7 @@ alcanzado. En **negrita**, los vértices ya extraídos (su valor es definitivo).
 6. [Backtracking: rutas simples](#6-backtracking-rutas-simples)
 7. [Branch & Bound: reparto en k contenedores](#7-branch--bound-reparto-en-k-contenedores)
 8. [UCS: Dijkstra con parada temprana](#8-ucs-dijkstra-con-parada-temprana)
+9. [Lugares infectados (Dijkstra y Backtracking)](#9-lugares-infectados-dijkstra-y-backtracking)
 
 ---
 
@@ -740,3 +741,54 @@ GET /api/grafo/ucs?origen=LBO&destino=HIT
 Las cuatro primeras son salidas reales del endpoint; todas están en `UcsTest`, que además verifica
 en cada caso que camino y costo sean iguales a los de `dijkstra` y que
 `nodosExpandidosUcs ≤ nodosExpandidosDijkstra`.
+
+---
+
+## 9. Lugares infectados (Dijkstra y Backtracking)
+
+Parámetro opcional `infectados` de `/dijkstra` y `/rutas`: lugares que ninguna ruta puede pisar.
+Dijkstra no relaja hacia un infectado (nunca entra a la cola); el backtracking los arranca como
+visitados. Detalle y complejidad en
+[`ENDPOINTS.md`](ENDPOINTS.md#lugares-infectados-en-dijkstra).
+
+### 9.1 Casos calculados a mano (minutos a pie)
+
+| Consulta | Sin infectados | Con infectados | Salida real |
+|---|---|---|---|
+| PAL → CUN, `infectados=MON` | PAL – MON – CUN = 66 + 18 = 84 | PAL – CUN = **90** | `{"vertices":["PAL","CUN"],"costoTotal":90.0}` |
+| LBO → HIT, `infectados=CON` | LBO – CON – ABA – HIT = 29 + 36 + 19 = 84 | LBO – PMA – OBE – ABA – HIT = 36 + 20 + 28 + 19 = **103** | `{"vertices":["LBO","PMA","OBE","ABA","HIT"],"costoTotal":103.0}` |
+| LBO → HIT, `infectados=CON,ABA` | 84 | LBO – PMA – RET – PAL – HIT = 36 + 18 + 45 + 21 = **120** | `{"vertices":["LBO","PMA","RET","PAL","HIT"],"costoTotal":120.0}` |
+| RET → CUN, `infectados=PAL` | RET – PAL – MON – CUN = 129 | **sin camino** | 422 `No hay camino de RET a CUN` |
+| PAL → CUN, `infectados=MON,PAL` | — | origen infectado | 400 `El origen PAL esta infectado: no se puede usar` |
+| PAL → CUN, `infectados=XXX` | — | id inexistente | 400 `No existe el nodo con id: XXX` |
+
+**Por qué PAL → CUN pasa a 90.** En la traza de la sección 1, dist[CUN] arranca en 90 por la calle
+directa y baja a 84 cuando se extrae MON (66 + 18). Con MON infectado, al expandir PAL no se relaja
+hacia MON: dist[MON] queda en ∞, MON nunca se extrae y la mejora a 84 no ocurre. CUN se queda con
+90, previo[CUN] = PAL.
+
+**Por qué LBO → HIT con CON, ABA da 120.** Sin CON ni ABA, a HIT solo se llega por PAL o PCE, y a
+PCE solo por ABA o HIT: hay que llegar a PAL. Desde LBO la única salida es PMA (36). De PMA a PAL:
+por RET, 18 + 45 = 63; por RET – REC, 18 + 20 + 30 = 68; por OBE – REC, 20 + 25 + 30 = 75. Gana RET: 36 + 63 + 21 = 120.
+
+**Por qué RET → CUN queda sin camino.** Las calles de CUN son solo MON – CUN y PAL – CUN, y las de
+MON solo PAL – MON y MON – CUN. Con PAL infectado, el conjunto {MON, CUN} no tiene ninguna calle
+hacia el resto: el grafo sin PAL queda desconectado. Dijkstra termina con dist[CUN] = ∞ y responde 422.
+
+### 9.2 Backtracking con un infectado
+
+`GET /api/grafo/rutas?origen=RET&destino=CUN&costoMaximo=150&saltosMaximos=4&infectados=REC`
+
+| | Rutas | Nodos con poda | Nodos sin poda |
+|---|---|---|---|
+| Sin infectados | 4 | 118 | 684 |
+| `infectados=REC` | 2: RET – PAL – CUN (45 + 90 = 135) y RET – PAL – MON – CUN (45 + 66 + 18 = 129) | **57** | **212** |
+
+Las dos rutas que desaparecen son las que pasaban por REC (RET – REC – PAL – CUN = 140 y
+RET – REC – PAL – MON – CUN = 134). Por REC no se pasa, así que hay que llegar a PAL: directo (45) o
+rodeando, por ejemplo RET – OBE – ABA – HIT – PAL = 22 + 28 + 19 + 21 = 90, y desde PAL faltan al
+menos 84 (90 + 84 = 174 > 150). Por eso quedan solo las que usan RET – PAL. Con y sin poda devuelven
+las mismas rutas. Los nodos explorados bajan en las dos corridas porque REC nunca se visita: se
+eliminan todos los subárboles que colgaban de él, sin entrar a ninguno.
+
+Casos cubiertos por `LugaresInfectadosTest` (sin Neo4j).

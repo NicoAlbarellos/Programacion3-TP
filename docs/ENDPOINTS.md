@@ -244,6 +244,7 @@ Implementación: `CaminosMinimos.dijkstra` (`algorithm/CaminosMinimos.java`).
 |---|---|---|---|
 | `origen` | String | sí | Id del lugar de partida (ej. `PAL`). |
 | `destino` | String | sí | Id del lugar de llegada (ej. `CUN`). |
+| `infectados` | lista de String (ids separados por coma) | no | Lugares tomados por zombies: la ruta no puede pasar por ellos, ni siquiera como paso intermedio (ej. `infectados=CON,ABA`). Sin el parámetro, Dijkstra normal. |
 
 **Respuesta:** `vertices` = lugares del camino en orden (incluye origen y destino);
 `costoTotal` = minutos a pie del camino.
@@ -274,6 +275,41 @@ GET /api/grafo/dijkstra?origen=RET&destino=CUN
 
 45 + 66 + 18 = 129. Por la calle directa PAL – CUN serían 45 + 90 = 135.
 
+**Con lugares infectados** (ver [Lugares infectados](#lugares-infectados-en-dijkstra) más abajo):
+
+```
+GET /api/grafo/dijkstra?origen=PAL&destino=CUN&infectados=MON
+```
+
+```json
+{"vertices":["PAL","CUN"],"costoTotal":90.0}
+```
+
+Con el Monumental infectado ya no se puede usar PAL → MON → CUN (84): queda la calle directa
+PAL – CUN, **90**.
+
+```
+GET /api/grafo/dijkstra?origen=LBO&destino=HIT&infectados=CON
+```
+
+```json
+{"vertices":["LBO","PMA","OBE","ABA","HIT"],"costoTotal":103.0}
+```
+
+Sin infectados es LBO → CON → ABA → HIT = 84. Sin Constitución hay que rodear por Puerto Madero y
+el Obelisco: 36 + 20 + 28 + 19 = **103**.
+
+```
+GET /api/grafo/dijkstra?origen=LBO&destino=HIT&infectados=CON,ABA
+```
+
+```json
+{"vertices":["LBO","PMA","RET","PAL","HIT"],"costoTotal":120.0}
+```
+
+Sin Constitución ni Abasto: 36 + 18 + 45 + 21 = **120** (la siguiente, LBO – PMA – RET – REC – PAL – HIT,
+cuesta 36 + 18 + 20 + 30 + 21 = 125).
+
 **Origen = destino** (ej. `?origen=RET&destino=RET`): 200 con `{"vertices":["RET"],"costoTotal":0.0}`.
 No es un caso especial: `dist[origen] = 0` y la reconstrucción termina enseguida.
 
@@ -292,11 +328,34 @@ GET /api/grafo/dijkstra?origen=PAL&destino=XXX
 |---|---|---|
 | `origen` o `destino` inexistente | 400 | `No existe el nodo con id: XXX` |
 | Alguna calle con costo negativo | 400 | `Dijkstra/UCS no admiten costos negativos: ...` |
-| El destino no es alcanzable desde el origen | 422 | `No hay camino de X a Y` |
+| Un id de `infectados` inexistente (ej. `infectados=XXX`) | 400 | `No existe el nodo con id: XXX` |
+| El origen o el destino está en `infectados` (ej. `origen=PAL&infectados=MON,PAL`) | 400 | `El origen PAL esta infectado: no se puede usar` (o `El destino ...`) |
+| El destino no es alcanzable desde el origen (también cuando los infectados lo aíslan) | 422 | `No hay camino de X a Y` |
 
-El caso inalcanzable no se puede provocar con los datos actuales (el grafo es conexo): está
+Sin infectados el caso inalcanzable no se da con los datos actuales (el grafo es conexo): está
 cubierto por `CaminosMinimosTest.destinoInalcanzableFalla`, que agrega un lugar aislado `ZZZ` y
-verifica el mensaje `No hay camino de RET a ZZZ`.
+verifica el mensaje `No hay camino de RET a ZZZ`. **Con infectados sí se da**:
+
+```
+GET /api/grafo/dijkstra?origen=RET&destino=CUN&infectados=PAL
+```
+
+```
+422 Unprocessable Entity
+{"estado":"ERROR","detalle":"No hay camino de RET a CUN"}
+```
+
+Ciudad Universitaria solo tiene calles a MON y a PAL, y el Monumental solo a PAL y a CUN: con
+Plaza Italia infectada, {MON, CUN} queda separado del resto del grafo.
+
+```
+GET /api/grafo/dijkstra?origen=PAL&destino=CUN&infectados=MON,PAL
+```
+
+```
+400 Bad Request
+{"estado":"ERROR","detalle":"El origen PAL esta infectado: no se puede usar"}
+```
 
 **Por qué es greedy.** En cada paso se extrae de la cola el lugar **no procesado con menor
 dist[]** y esa elección **no se reconsidera**: su distancia queda definitiva. Es correcto porque
@@ -316,6 +375,32 @@ que además detecta ciclos negativos.) En el dominio no pasa: los costos son min
 **Detalle de comportamiento:** el algoritmo calcula el árbol de caminos mínimos completo desde el
 origen y **no corta** cuando extrae el destino. Cortar al expandir el destino es justamente la
 diferencia de [UCS](#get-apigrafoucs).
+
+<a id="lugares-infectados-en-dijkstra"></a>
+**Lugares infectados.** Es la modificación "excluir un nodo", hecha sin tocar el grafo compartido
+(se carga una vez y lo usan todos los pedidos). Implementación: `algorithm/LugaresInfectados.java`
+y la sobrecarga `CaminosMinimos.dijkstra(grafo, origen, destino, Set<String> infectados)` (la de
+3 parámetros la llama con `Set.of()`).
+1. `LugaresInfectados.marcar` traduce los ids a un arreglo `boolean[] bloqueado` indexado como el
+   grafo y valida: id inexistente → 400; origen o destino infectado → 400.
+2. En la **relajación** (`relajarVecinos`) se agrega una sola línea: `if (bloqueado[v]) continue;`.
+   Hacia un lugar infectado **no se relaja nunca**.
+3. Alcanza con eso: un vértice solo entra a la cola cuando se lo relaja con éxito. Si nunca se
+   relaja hacia v, `dist[v]` queda en ∞, v nunca entra a la cola, nunca se extrae ni se expande y
+   nunca aparece en `previo[]`, así que ningún camino reconstruido pasa por él. Es como si se
+   hubieran borrado sus calles.
+4. El origen no pasa por la relajación (se encola directo con dist 0): por eso se rechaza que el
+   origen esté infectado. El destino infectado también se rechaza: nunca sería alcanzable.
+5. Si sin los infectados el destino queda con dist = ∞, salta la validación de siempre: 422.
+
+Sacar lugares no puede crear costos negativos, así que el argumento greedy sigue valiendo.
+
+**Con infectados la complejidad no cambia: O((V + E) log V).** Marcar cuesta O(V + I), con
+I = cantidad de infectados (crear el arreglo de V booleanos + un `indiceDe` por infectado, búsqueda
+en `HashMap` O(1)), y queda absorbido por el O(V + E) de la validación de costos. Dentro del bucle
+se suma una consulta `bloqueado[v]`, **O(1) por arista**: el trabajo por arista sigue siendo
+constante más, como mucho, un `add` O(log V). La cola incluso tiene menos entradas (los infectados
+no entran). Espacio extra: el arreglo `bloqueado[]`, O(V); el total sigue en O(V + E).
 
 **Complejidad temporal: O((V + E) log V).**
 - **Eliminación perezosa en lugar de decreaseKey.** `java.util.PriorityQueue` no tiene
@@ -346,6 +431,8 @@ E + 1 entradas) y el camino reconstruido (≤ V).
   `previo[]` guarda el árbol de caminos mínimos; el camino se reconstruye recorriéndolo desde el
   destino hacia atrás (insertando al principio de un `ArrayDeque`, O(1) por paso).
 - **Lista de adyacencia**: relajar los vecinos de u cuesta O(grado(u)).
+- **Arreglo `boolean[] bloqueado`** (solo con `infectados`): saber si v está infectado en O(1)
+  dentro de la relajación. Buscando en la lista de ids sería O(I) por arista.
 
 ---
 
@@ -940,6 +1027,7 @@ Implementación: `Backtracking.rutasSimples` (`algorithm/Backtracking.java`). El
 | `destino` | String | sí | Id del lugar de llegada (ej. `CUN`). |
 | `costoMaximo` | double (≥ 0) | no (default `1000`) | Tiempo máximo de la ruta, en minutos a pie. Se aceptan rutas con costo **≤** costoMaximo. |
 | `saltosMaximos` | int (≥ 0) | no (default `10`) | Cantidad máxima de tramos (aristas) de la ruta. |
+| `infectados` | lista de String (ids separados por coma) | no | Lugares tomados por zombies: ninguna ruta pasa por ellos (ej. `infectados=REC`). Sin el parámetro, no se bloquea nada. |
 
 **Respuesta**
 
@@ -973,6 +1061,20 @@ RET – PAL – MON – CUN (129), con 144 nodos con poda contra 684 sin poda (t
 `retiroCiudadUniversitaria130Minutos`). La tabla con todos los casos y una traza a mano están en
 [`VERIFICACIONES.md`](VERIFICACIONES.md#6-backtracking-rutas-simples).
 
+**Con lugares infectados** (ver [Lugares infectados](#lugares-infectados-en-el-backtracking)):
+
+```
+GET /api/grafo/rutas?origen=RET&destino=CUN&costoMaximo=150&saltosMaximos=4&infectados=REC
+```
+
+```json
+{"rutas":[{"vertices":["RET","PAL","CUN"],"costoTotal":135.0},{"vertices":["RET","PAL","MON","CUN"],"costoTotal":129.0}],"nodosConPoda":57,"nodosSinPoda":212}
+```
+
+Con Recoleta infectada desaparecen las dos rutas que pasaban por REC; quedan RET – PAL – CUN (135) y
+RET – PAL – MON – CUN (129). Los nodos explorados bajan de 118 a **57** con poda y de 684 a **212**
+sin poda: todos los subárboles que entraban a REC ya no existen.
+
 **Origen = destino:** una sola ruta `[RET]` de costo 0 y 1 nodo explorado (la raíz ya es el caso
 base).
 
@@ -994,6 +1096,8 @@ GET /api/grafo/rutas?origen=RET&destino=XXX
 | `saltosMaximos` negativo (ej. `-1`) | 400 | `Los saltos maximos no pueden ser negativos: -1` |
 | Falta `origen` o `destino` | 400 | `Falta el parametro: destino` |
 | Parámetro no numérico (ej. `costoMaximo=abc`) | 400 | `Valor invalido para costoMaximo: abc` |
+| Un id de `infectados` inexistente | 400 | `No existe el nodo con id: XXX` |
+| El origen o el destino está en `infectados` | 400 | `El origen RET esta infectado: no se puede usar` (o `El destino ...`) |
 
 Si no hay ninguna ruta que cumpla, no es error: devuelve `rutas: []` con los contadores (ej.
 RET → CUN con 110 minutos y 3 tramos: 0 rutas, 47 nodos con poda, 684 sin poda).
@@ -1036,6 +1140,21 @@ MON – CUN y RET – REC – OBE – PMA – LBO – CON – ABA – PCE – HI
 Devuelve 110 rutas. **La poda sirve cuando las restricciones son ajustadas**; con límites holgados
 el backtracking tiende a la enumeración completa.
 
+<a id="lugares-infectados-en-el-backtracking"></a>
+**Lugares infectados.** El backtracking ya tiene `visitado[]` para que la ruta sea simple. Cada
+búsqueda (con y sin poda) arranca con `visitado = bloqueado.clone()`: los infectados **ya figuran
+como visitados** antes de empezar y el chequeo de camino simple (`if (visitado[w]) continue;`) los
+descarta sin código nuevo en la recursión. Como el retroceso solo desmarca lo que la búsqueda
+marcó, los infectados quedan marcados toda la corrida. El `bloqueado[]` lo arma y valida
+`LugaresInfectados.marcar`, igual que en Dijkstra.
+
+**Con infectados la complejidad no cambia** (O(b^L) con poda, peor caso O(V!)): marcar cuesta
+O(V + I) una vez (más O(V) por cada `clone`) y el chequeo por opción sigue siendo O(1). En la
+práctica **se explora todavía menos**: un infectado funciona como una poda más, que corta antes de
+entrar al nodo (no cuenta como explorado) y elimina de una vez **todos los subárboles** que
+colgaban de él, también en la corrida sin poda. En el ejemplo con REC infectado: 118 → 57 nodos con
+poda y 684 → 212 sin poda. Es lo mismo que correr el backtracking sobre el grafo sin esos I lugares.
+
 **Complejidad temporal: O(b^L) nodos, O(V!) en el peor caso.**
 - L = min(saltosMaximos, V − 1) es la profundidad máxima del árbol (un camino simple tiene a lo sumo
   V − 1 tramos) y b el grado máximo (cantidad de opciones por nodo).
@@ -1057,7 +1176,7 @@ de recursión, de profundidad ≤ L + 1 ≤ V. La salida ocupa O(R · V).
 
 **Estructura usada:**
 - **Arreglo `boolean[] visitado`**: marcar, consultar y desmarcar en O(1); es lo que hace barato el
-  retroceso.
+  retroceso. Con `infectados` arranca como copia de `bloqueado[]` (O(V)).
 - **`ArrayList<Integer> camino`** usado como pila: agregar y sacar el último en O(1).
 - **Pila implícita** (la recursión): cada nivel guarda el lugar actual, el costo y los saltos
   acumulados, que viajan como parámetros (no hay que recalcularlos).
