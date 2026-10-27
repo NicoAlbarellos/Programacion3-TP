@@ -12,7 +12,7 @@ Hecho sobre el scaffold de la cátedra (Spring Boot + Neo4j).
 | Nombre | Usuario de GitHub |
 |---|---|
 | Nicolás Albarellos | [NicoAlbarellos](https://github.com/NicoAlbarellos) |
-| Juan Manuel Portnoy | [jmportnoy](https://github.com/jmportnoy) | |
+| Juan Manuel Portnoy | [jmportnoy](https://github.com/jmportnoy) |
 | Exequiel Campbell | [ExeCampbell](https://github.com/ExeCampbell) |
 
 ---
@@ -136,15 +136,15 @@ números en [`docs/VERIFICACIONES.md`](docs/VERIFICACIONES.md#4-greedy-vs-mochil
 | Dijkstra | `GET /api/grafo/dijkstra` | Ruta más rápida (en minutos) entre dos refugios | Implementado |
 | Floyd-Warshall | `GET /api/grafo/floyd`, `/floyd/camino`, `/floyd/comparacion` | Tabla de tiempos mínimos entre todos los lugares, ruta entre dos lugares y comparación con Dijkstra | Implementado |
 | Prim / Kruskal (Union-Find) | `GET /api/grafo/prim`, `/kruskal` | Mínimo de calles a despejar para conectar todos los refugios | Implementado |
-| Backtracking | `GET /api/grafo/rutas` | Rutas de escape con tiempo máximo y cantidad máxima de paradas | En desarrollo |
+| Backtracking | GET /api/grafo/rutas | Rutas de escape con tiempo máximo y cantidad máxima de paradas (informa nodos explorados con y sin poda) | Implementado |
 | QuickSort / MergeSort | `GET /api/seleccion/quicksort`, `/mergesort` | Suministros ordenados por peso, utilidad o ratio | Implementado |
 | Greedy | `GET /api/seleccion/greedy` | Qué llevar en la mochila eligiendo por ratio utilidad/peso | Implementado |
 | Mochila 0/1 (PD) | `GET /api/seleccion/dinamica`, `/comparar` | Qué llevar en la mochila para maximizar la utilidad (óptimo), y comparación con el greedy | Implementado |
-| Branch & Bound | `GET /api/seleccion/repartir` | Repartir los suministros entre k sobrevivientes minimizando la carga máxima | En desarrollo |
+| Branch & Bound | GET /api/seleccion/repartir | Repartir los suministros entre k sobrevivientes minimizando la carga máxima (informa la cota, nodos explorados y podados) | Implementado |
 
 El detalle de cada endpoint (parámetros, ejemplo real, complejidad y estructura) está en
 [`docs/ENDPOINTS.md`](docs/ENDPOINTS.md). Los cálculos a mano sobre nuestro grafo (Dijkstra, Prim y
-Kruskal paso a paso, greedy vs. mochila PD, Floyd) están en
+Kruskal paso a paso, greedy vs. mochila PD, Floyd, nodos con y sin poda del backtracking y la cota y los nodos podados del Branch & Bound) están en
 [`docs/VERIFICACIONES.md`](docs/VERIFICACIONES.md). La tabla de complejidades de todos los
 algoritmos (recurrencias, temporal, espacial y estructura) está en
 [`docs/COMPLEJIDADES.md`](docs/COMPLEJIDADES.md).
