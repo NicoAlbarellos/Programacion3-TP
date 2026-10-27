@@ -23,11 +23,13 @@ verifican Dijkstra, Prim, Kruskal, greedy vs. PD y Floyd están en
 - [GET /api/grafo/floyd/comparacion](#get-apigrafofloydcomparacion) — Floyd vs. Dijkstra V veces
 - [GET /api/grafo/prim](#get-apigrafoprim) — Prim
 - [GET /api/grafo/kruskal](#get-apigrafokruskal) — Kruskal (Union-Find)
+- [GET /api/grafo/rutas](#get-apigraforutas) — Backtracking (rutas simples con límites)
 - [GET /api/seleccion/quicksort](#get-apiseleccionquicksort) — QuickSort
 - [GET /api/seleccion/mergesort](#get-apiseleccionmergesort) — MergeSort
 - [GET /api/seleccion/greedy](#get-apiselecciongreedy) — Greedy (mochila 0/1 por ratio)
 - [GET /api/seleccion/dinamica](#get-apiselecciondinamica) — Mochila 0/1 con programación dinámica
 - [GET /api/seleccion/comparar](#get-apiseleccioncomparar) — Greedy vs. PD sobre la misma mochila
+- [GET /api/seleccion/repartir](#get-apiseleccionrepartir) — Branch & Bound (reparto en k contenedores)
 - [Errores](#errores)
 - [Pendientes](#pendientes)
 
@@ -271,6 +273,9 @@ GET /api/grafo/dijkstra?origen=RET&destino=CUN
 
 45 + 66 + 18 = 129. Por la calle directa PAL – CUN serían 45 + 90 = 135.
 
+**Origen = destino** (ej. `?origen=RET&destino=RET`): 200 con `{"vertices":["RET"],"costoTotal":0.0}`.
+No es un caso especial: `dist[origen] = 0` y la reconstrucción termina enseguida.
+
 **Errores**
 
 ```
@@ -478,6 +483,9 @@ GET /api/grafo/floyd/camino?origen=LBO&destino=CUN
 36 + 18 + 45 + 66 + 18 = 183, el par más lejano del grafo. Los dos coinciden con `/dijkstra`; el
 test `caminoFloydIgualADijkstraEnTodosLosPares` lo comprueba para los 144 pares (costo y vértices:
 en el dominio no hay dos caminos mínimos empatados).
+
+**Origen = destino:** 200 con `{"vertices":["RET"],"costoTotal":0.0}` (la diagonal vale 0 y
+`siguiente[i][i] = i`), igual que Dijkstra.
 
 **Errores**
 
@@ -753,6 +761,152 @@ MergeSort), arreglos `padre[]` y `rango[]` del Union-Find (V), aristas del árbo
   E, mientras que Kruskal tendría que ordenar ≈ V² aristas, O(V² log V).
 - Prim necesita un origen y hace crecer un solo árbol; Kruskal arranca con V componentes sueltas
   (un bosque) y las va uniendo.
+
+---
+
+## GET /api/grafo/rutas
+
+**Rutas simples con Backtracking.** En el dominio: **todas las rutas de escape a pie** entre dos
+refugios que no tarden más de un tiempo máximo (minutos) ni tengan más de una cantidad máxima de
+tramos (paradas), sin pasar dos veces por el mismo lugar. A diferencia de Dijkstra, no busca
+**la** más rápida: enumera **todas** las que cumplen las restricciones, para tener alternativas si
+una calle se llena de zombies.
+
+Implementación: `Backtracking.rutasSimples` (`algorithm/Backtracking.java`). El grafo se carga
+**no dirigido** (`DIRIGIDO = false`).
+
+**Parámetros**
+
+| Nombre | Tipo | Obligatorio | Significado |
+|---|---|---|---|
+| `origen` | String | sí | Id del lugar de partida (ej. `RET`). |
+| `destino` | String | sí | Id del lugar de llegada (ej. `CUN`). |
+| `costoMaximo` | double (≥ 0) | no (default `1000`) | Tiempo máximo de la ruta, en minutos a pie. Se aceptan rutas con costo **≤** costoMaximo. |
+| `saltosMaximos` | int (≥ 0) | no (default `10`) | Cantidad máxima de tramos (aristas) de la ruta. |
+
+**Respuesta**
+
+| Campo | Qué es |
+|---|---|
+| `rutas` | Lista de rutas válidas, en el orden en que las encuentra el backtracking (orden de las listas de adyacencia). Cada una con `vertices` (camino, origen y destino incluidos) y `costoTotal` (minutos). |
+| `nodosConPoda` | Nodos del árbol de búsqueda explorados **con** la poda por viabilidad. |
+| `nodosSinPoda` | Nodos explorados por la **misma** búsqueda **sin** poda (solo respeta el camino simple y filtra al llegar al destino). |
+
+**Nodo explorado** = cada entrada a la función recursiva `explorar`, raíz incluida. Cada nodo del
+árbol de búsqueda es un camino parcial que sale del origen.
+
+**Ejemplo**
+
+```
+GET /api/grafo/rutas?origen=RET&destino=CUN&costoMaximo=150&saltosMaximos=4
+```
+
+```json
+{"rutas":[{"vertices":["RET","PAL","CUN"],"costoTotal":135.0},{"vertices":["RET","PAL","MON","CUN"],"costoTotal":129.0},{"vertices":["RET","REC","PAL","CUN"],"costoTotal":140.0},{"vertices":["RET","REC","PAL","MON","CUN"],"costoTotal":134.0}],"nodosConPoda":118,"nodosSinPoda":684}
+```
+
+- 4 rutas de Retiro a Ciudad Universitaria en ≤ 150 minutos y ≤ 4 tramos. La más rápida,
+  RET – PAL – MON – CUN = 45 + 66 + 18 = **129**, coincide con `/dijkstra`.
+- RET – REC – PAL – CUN = 20 + 30 + 90 = 140. Las rutas que salen por OBE o PMA superan los 150
+  minutos o los 4 tramos (ej. RET – OBE – REC – PAL – CUN = 22 + 25 + 30 + 90 = 167).
+- La poda redujo la búsqueda de **684 a 118 nodos** (−83 %) y devolvió las mismas 4 rutas.
+
+Con un límite más ajustado (`costoMaximo=130&saltosMaximos=5`) queda una sola ruta,
+RET – PAL – MON – CUN (129), con 144 nodos con poda contra 684 sin poda (test
+`retiroCiudadUniversitaria130Minutos`). La tabla con todos los casos y una traza a mano están en
+[`VERIFICACIONES.md`](VERIFICACIONES.md#6-backtracking-rutas-simples).
+
+**Origen = destino:** una sola ruta `[RET]` de costo 0 y 1 nodo explorado (la raíz ya es el caso
+base).
+
+**Errores**
+
+```
+GET /api/grafo/rutas?origen=RET&destino=XXX
+```
+
+```
+400 Bad Request
+{"estado":"ERROR","detalle":"No existe el nodo con id: XXX"}
+```
+
+| Situación | Código | `detalle` |
+|---|---|---|
+| `origen` o `destino` inexistente | 400 | `No existe el nodo con id: XXX` |
+| `costoMaximo` negativo (ej. `-5`) | 400 | `El costo maximo no puede ser negativo: -5.0` |
+| `saltosMaximos` negativo (ej. `-1`) | 400 | `Los saltos maximos no pueden ser negativos: -1` |
+| Falta `origen` o `destino` | 400 | `Falta el parametro: destino` |
+| Parámetro no numérico (ej. `costoMaximo=abc`) | 400 | `Valor invalido para costoMaximo: abc` |
+
+Si no hay ninguna ruta que cumpla, no es error: devuelve `rutas: []` con los contadores (ej.
+RET → CUN con 110 minutos y 3 tramos: 0 rutas, 47 nodos con poda, 684 sin poda).
+
+**Cómo funciona (backtracking de tipo 2).** Es el esquema de la clase 9 de N reinas o Sudoku: cada
+llamada recorre **en un bucle las opciones** (los vecinos del lugar actual) y hace una llamada
+recursiva por cada opción viable.
+
+1. **Solución parcial:** el camino desde el origen (`camino`) y el arreglo `visitado[]`.
+2. **Caso base:** si el lugar actual es el destino, se registra la ruta (una copia del camino) y se
+   vuelve. No se sigue de largo: una ruta simple que ya llegó al destino no puede volver a pasar por él.
+3. **Opciones:** para cada vecino w no visitado (camino **simple**: no se repiten lugares).
+4. **Poda por viabilidad:** si `costo + costo(v, w) > costoMaximo` o `saltos + 1 > saltosMaximos`,
+   no se baja a w. Esa rama ya no puede dar ninguna ruta válida, así que se poda **sin completar el
+   camino**.
+5. **Avanzar:** se marca w, se agrega al camino y se llama recursivamente con el costo y los saltos
+   acumulados.
+6. **Retroceso (deshacer):** al volver de la llamada se saca w del camino y se **desmarca**
+   (`visitado[w] = false`). Desmarcar es lo que distingue al backtracking de un DFS: en DFS un lugar
+   visitado queda marcado para siempre; acá w puede volver a usarse **por otro camino** (por ejemplo,
+   PAL aparece en las 4 rutas del ejemplo, llegando desde RET o desde REC).
+
+**¿Por qué con y sin poda dan las mismas rutas?** La poda solo corta cuando el costo acumulado ya
+supera el máximo o los saltos ya superan el límite. Como los costos son **no negativos** (minutos a
+pie) el costo de un camino nunca baja al agregarle tramos, y los saltos solo suben: ningún camino que
+pase por un nodo podado puede terminar siendo válido. La corrida sin poda explora esos caminos y los
+descarta recién al llegar al destino (`registrarSiCumple`). Por eso la poda **no pierde soluciones**,
+solo ahorra trabajo. Lo verifica `conYSinPodaDevuelvenLasMismasRutas`. (Con costos negativos la poda
+por costo sería incorrecta; en el dominio no existen.)
+
+**¿Por qué `nodosSinPoda` vale siempre 684 para RET → CUN?** Sin poda la búsqueda no mira los
+límites, así que su árbol es siempre el mismo: todos los caminos simples que salen de RET sin pasar
+por CUN como intermedio (más los que terminan en CUN). Solo depende del origen, el destino y el grafo.
+
+**¿Por qué con `costoMaximo=1000&saltosMaximos=10` la poda casi no ahorra (682 contra 684)?** Porque
+los límites no restringen: el camino simple más largo de RET a CUN tarda 327 minutos (muy por debajo
+de 1000), así que la poda por costo nunca se activa. La de saltos solo corta los 2 caminos de 11
+tramos, los que recorren los 12 lugares (RET – PMA – LBO – CON – OBE – REC – ABA – PCE – HIT – PAL –
+MON – CUN y RET – REC – OBE – PMA – LBO – CON – ABA – PCE – HIT – PAL – MON – CUN): 684 − 2 = 682.
+Devuelve 110 rutas. **La poda sirve cuando las restricciones son ajustadas**; con límites holgados
+el backtracking tiende a la enumeración completa.
+
+**Complejidad temporal: O(b^L) nodos, O(V!) en el peor caso.**
+- L = min(saltosMaximos, V − 1) es la profundidad máxima del árbol (un camino simple tiene a lo sumo
+  V − 1 tramos) y b el grado máximo (cantidad de opciones por nodo).
+- Recurrencia: cada nodo hace hasta b llamadas con un nivel menos de profundidad y un trabajo O(b)
+  afuera (recorrer la lista de vecinos): T(L) = b · T(L − 1) + O(b). Por **sustracción** con a = b > 1
+  → O(b^L).
+- Peor caso: grafo completo y límites que no podan. Los caminos simples que salen del origen son
+  (V−1) + (V−1)(V−2) + … + (V−1)! ≤ e · (V − 1)!, es decir **O(V!)**: crece factorialmente.
+- Cada ruta encontrada se copia en O(V); con R rutas, se suma O(R · V).
+- Eso es la corrida **con poda**: O(b^L), porque los límites acotan la profundidad.
+- La corrida **sin poda** no usa los límites para cortar: recorre todos los caminos simples desde
+  el origen, O(b^(V − 1)) (peor caso O(V!)).
+- **El endpoint corre las dos búsquedas** (con y sin poda) para poder reportar los dos contadores, así
+  que **su costo lo domina la corrida sin poda**. La poda baja el costo de la búsqueda que devuelve
+  las rutas; la otra está solo para medir.
+
+**Complejidad espacial: O(V)** (más la salida): `visitado[]` (V), el camino parcial (≤ V) y la pila
+de recursión, de profundidad ≤ L + 1 ≤ V. La salida ocupa O(R · V).
+
+**Estructura usada:**
+- **Arreglo `boolean[] visitado`**: marcar, consultar y desmarcar en O(1); es lo que hace barato el
+  retroceso.
+- **`ArrayList<Integer> camino`** usado como pila: agregar y sacar el último en O(1).
+- **Pila implícita** (la recursión): cada nivel guarda el lugar actual, el costo y los saltos
+  acumulados, que viajan como parámetros (no hay que recalcularlos).
+- **Lista de adyacencia**: las opciones de cada nodo son sus vecinos, recorridos en O(grado).
+- El estado va en un objeto `Busqueda` por llamada (no en campos del `@Component`, que es singleton),
+  así dos requests simultáneos no se pisan.
 
 ---
 
@@ -1204,6 +1358,177 @@ la PD. Espacio O(n · W).
 
 ---
 
+## GET /api/seleccion/repartir
+
+**Reparto de suministros en k contenedores con Branch & Bound (ramificación y poda).** En el
+dominio: hay que repartir **todos** los suministros entre k sobrevivientes de modo que **el que más
+carga lleve la menor cantidad de kg posible** (nadie queda sobrecargado y el grupo se mueve al ritmo
+del más lento). Es el problema de minimizar el **makespan** (la carga máxima) con contenedores
+idénticos; es NP-difícil, por eso se resuelve con búsqueda exhaustiva podada.
+
+Implementación: `RamificacionYPoda.repartir` (`algorithm/RamificacionYPoda.java`). El controller lee
+los suministros de la base (ordenados por id) y delega.
+
+**Parámetros**
+
+| Nombre | Tipo | Obligatorio | Significado |
+|---|---|---|---|
+| `contenedores` | int (≥ 1) | sí | k = cantidad de sobrevivientes entre los que se reparte. |
+
+**Respuesta**
+
+| Campo | Qué es |
+|---|---|
+| `porContenedor` | Mapa `"Sobreviviente 1"` … `"Sobreviviente m"` → suministros que lleva cada uno (objetos completos: `id`, `nombre`, `peso`, `valor`, `nodoId`). m = min(k, n) entradas (ver más abajo). |
+| `cargaMaxima` | kg del sobreviviente más cargado en el reparto óptimo (el makespan mínimo). |
+| `cotaInicial` | La cota optimista en la raíz: peso total / m. |
+| `nodosExplorados` | Entradas a la recursión `ramificar`, raíz incluida. |
+| `nodosPodados` | Hijos que **no se abrieron** porque su cota no mejoraba la mejor solución conocida. |
+
+**Ejemplo**
+
+```
+GET /api/seleccion/repartir?contenedores=3
+```
+
+```json
+{"porContenedor":{
+  "Sobreviviente 1":[{"id":"S1","nombre":"Botiquin","peso":3.0,"valor":50.0,"nodoId":"HIT"},{"id":"S3","nombre":"Agua 7L","peso":7.0,"valor":55.0,"nodoId":"PCE"},{"id":"S4","nombre":"Linterna","peso":1.0,"valor":8.0,"nodoId":"OBE"}],
+  "Sobreviviente 2":[{"id":"S2","nombre":"Comida enlatada","peso":4.0,"valor":40.0,"nodoId":"ABA"},{"id":"S5","nombre":"Radio","peso":2.0,"valor":14.0,"nodoId":"RET"},{"id":"S6","nombre":"Bate","peso":5.0,"valor":10.0,"nodoId":"MON"}],
+  "Sobreviviente 3":[{"id":"S7","nombre":"Bolsa de dormir","peso":6.0,"valor":30.0,"nodoId":"CUN"},{"id":"S8","nombre":"Herramientas","peso":5.0,"valor":24.0,"nodoId":"CON"}]},
+ "cargaMaxima":11.0,"cotaInicial":11.0,"nodosExplorados":61,"nodosPodados":87}
+```
+
+(Respuesta real, con saltos de línea agregados para leerla.) Cargas: 3 + 7 + 1 = 11, 4 + 2 + 5 = 11 y
+6 + 5 = 11. El total es 33 kg y 33 / 3 = 11, así que el reparto es **perfecto**: alcanza la cota
+optimista, y por eso es óptimo sin necesidad de mirar nada más. Se exploraron **61 nodos** y se
+podaron **87 hijos**; el árbol completo sin poda tendría 9841 nodos.
+
+```
+GET /api/seleccion/repartir?contenedores=2
+```
+
+Sobreviviente 1 = S1, S2, S3, S4, S5 (3 + 4 + 7 + 1 + 2 = **17 kg**) y Sobreviviente 2 = S6, S7, S8
+(5 + 6 + 5 = 16 kg). `"cargaMaxima":17.0,"cotaInicial":16.5,"nodosExplorados":84,"nodosPodados":74`.
+La cota es 16,5 pero con pesos enteros no se puede bajar de 17: la cota es optimista, no siempre
+alcanzable.
+
+Con `contenedores=1000000` responde en unos 0,04 s con 8 sobrevivientes (m = min(k, n) = 8):
+Sobreviviente 1 = S1+S2 (7 kg), S3, S4+S5, S6, S7 y S8 en los siguientes, y los Sobrevivientes 7 y 8
+vacíos. `cargaMaxima` 7.0 (no puede ser menor: el Agua 7L pesa 7), 50 explorados y 72 podados. B&B se
+queda con el **primer** reparto que alcanza 7 y poda el resto, porque la poda es con `>=`: no busca
+otro reparto igual de bueno. La tabla por k y una
+traza a mano están en [`VERIFICACIONES.md`](VERIFICACIONES.md#7-branch--bound-reparto-en-k-contenedores).
+
+**Errores**
+
+```
+GET /api/seleccion/repartir?contenedores=0
+```
+
+```
+400 Bad Request
+{"estado":"ERROR","detalle":"La cantidad de contenedores debe ser al menos 1: 0"}
+```
+
+| Situación | Código | `detalle` |
+|---|---|---|
+| `contenedores` < 1 | 400 | `La cantidad de contenedores debe ser al menos 1: 0` |
+| Falta `contenedores` | 400 | `Falta el parametro: contenedores` |
+| `contenedores` no entero (ej. `abc`) | 400 | `Valor invalido para contenedores: abc` |
+| Algún suministro con peso negativo o no numérico | 400 | `Peso invalido (negativo o no numerico) en: ...` |
+| No existe ningún reparto factible | 422 | `No hay un reparto factible` |
+
+El 422 no puede ocurrir con el problema actual (sin capacidad por sobreviviente, todo reparto es
+factible): queda preparado para el caso en que se agregue una restricción de capacidad máxima por
+sobreviviente y ninguna asignación la cumpla.
+
+**Cómo funciona.** Branch & Bound es **backtracking más una cota** (clase 12). Recorre en profundidad
+(DFS recursivo) un árbol donde el nivel i decide a qué sobreviviente va el suministro i (en orden de
+id).
+
+- **Ramificar:** el suministro i puede ir a cualquiera de los contenedores; cada opción es un hijo.
+- **Acotar:** para cada hijo se calcula una **cota inferior optimista** del makespan que se podría
+  alcanzar completando ese reparto parcial:
+
+  ```
+  cota = max( carga máxima después de ubicar el ítem i , peso total / m )
+  ```
+
+- **Podar:** si `cota >= mejor` (la mejor carga máxima encontrada hasta ahora), el hijo **no se abre**
+  y se cuenta en `nodosPodados`. `mejor` arranca en +∞ (no hay solución inicial), así que la primera
+  rama baja hasta una hoja sin podas.
+- **Hoja** (todos los ítems ubicados): si su carga máxima es menor que `mejor`, se guarda como nueva
+  mejor solución (copia de la asignación).
+- **Retroceso:** al volver del hijo se resta el peso del contenedor (`cargas[c] -= pesos[i]`).
+
+**La cota y por qué es optimista** (lo que pide el hito 11). Es una cota **inferior**: ningún reparto
+completo que se arme desde ese nodo puede tener una carga máxima menor. Los dos términos lo garantizan:
+1. **Carga máxima actual tras ubicar el ítem:** los pesos son no negativos, así que las cargas solo
+   crecen al agregar ítems. El contenedor más cargado hoy va a pesar **al menos** eso al final.
+2. **Peso total / m:** reparta como se reparta, los m contenedores suman el total, así que el más
+   cargado lleva **al menos el promedio**. Si k ≥ n (m = n), total / n ≤ peso del ítem más pesado ≤
+   óptimo, así que sigue siendo una cota válida.
+
+Como la cota **nunca sobreestima** el mejor valor alcanzable, si ya es ≥ `mejor`, ningún reparto de
+esa rama puede mejorar a la solución conocida, y descartarla **no pierde el óptimo**. Una cota que
+sobreestimara podría podar la rama del óptimo. Lo comprueba `optimoCoincideConFuerzaBruta`
+(k = 2, 3, 4 contra los k^n repartos).
+
+**Poda por optimalidad vs. poda por viabilidad.** El backtracking de `/rutas` poda por
+**viabilidad**: corta una rama porque ya **no puede dar una solución válida** (se pasó del tiempo o de
+los tramos). Acá todas las ramas dan repartos válidos; se poda por **optimalidad**: la rama podría dar
+una solución, pero **no una mejor** que la que ya se tiene. Para eso hace falta la cota y la mejor
+solución conocida, que va bajando: cuanto antes baja `mejor`, más se poda.
+
+Cuando `mejor` llega a la `cotaInicial` (k = 3: `mejor` = 11 = 33 / 3), **toda** rama tiene cota
+≥ 11 = `mejor` y se poda de inmediato: la búsqueda termina sola porque se probó que no se puede
+mejorar.
+
+**Ruptura de simetría.** Los contenedores son **idénticos**: el reparto {S1, S3, S4} / {S2, S5, S6} /
+{S7, S8} es el mismo con los nombres de los sobrevivientes permutados, y sin cuidado aparecería k!
+veces. Por eso un contenedor vacío solo se prueba si es el **primero vacío**: el ítem i puede ir a
+los contenedores ya usados o al siguiente (`limite = min(m, usados + 1)`). Por ejemplo, el primer
+ítem va siempre al Sobreviviente 1. Solo con esto (sin cota) el árbol de k = 3 baja de 9841 a 1645
+nodos; con la cota, a 61.
+
+**Solo m = min(k, n) contenedores.** Con pesos no negativos, un reparto óptimo nunca necesita más
+contenedores que ítems (los que sobran quedan vacíos y no cambian la carga máxima). Por eso con
+k = 1.000.000 no se reserva un arreglo de un millón de cargas ni un mapa de un millón de entradas:
+la respuesta tiene 8 sobrevivientes.
+
+Tanto la ruptura de simetría como el recorte a min(k, n) **valen solo porque los contenedores son
+idénticos**. Si cada sobreviviente tuviera una capacidad distinta, cambiar los nombres sí cambiaría
+la solución y habría que probar todos los contenedores.
+
+**Complejidad temporal: O(m^n) nodos en el peor caso**, con m = min(k, n).
+- Recurrencia: cada nodo abre hasta m hijos con un ítem menos por ubicar, y fuera de las llamadas
+  hace O(m) (evaluar la cota de cada hijo en O(1)): T(n) = m · T(n − 1) + O(m). Por **sustracción**
+  con a = m > 1 → **O(m^n)**.
+- Sin poda ni simetría el árbol completo tiene (m^(n+1) − 1) / (m − 1) nodos: con n = 8, **511**
+  (k = 2), **9841** (k = 3) y **87381** (k = 4). Con k = 1 es un solo camino: n + 1 = 9 nodos.
+- Cada nodo cuesta O(1) por hijo evaluado: la carga máxima viaja como parámetro y no se recalcula.
+  Cada mejora copia la asignación en O(n) (pocas veces: en k = 3, 9 mejoras).
+- La poda no cambia el peor caso (es exponencial), pero en la práctica el árbol se reduce muchísimo:
+  61 nodos de 9841 en k = 3.
+
+**Complejidad espacial: O(n)** (más la salida): arreglos `pesos[]`, `asignacion[]` y
+`mejorAsignacion[]` (n), `cargas[]` (m ≤ n) y la pila de recursión, de profundidad n + 1. Sin el
+recorte a min(k, n) sería O(n + k). La salida ocupa O(n + m).
+
+**Estructura usada:**
+- **Arreglo `double[] cargas`** (uno por contenedor): sumar y restar un peso en O(1), que es lo que
+  hace O(1) ramificar y retroceder.
+- **Arreglos `int[] asignacion` y `mejorAsignacion`**: la solución parcial (ítem → contenedor) y la
+  mejor encontrada; se copia con `clone()` solo al mejorar.
+- **Pila implícita** (recursión DFS): explorar en profundidad llega rápido a hojas y baja `mejor`
+  temprano, que es lo que hace efectiva la poda; con memoria O(n), a diferencia de un B&B por
+  mejor-primero con cola de prioridad, que puede guardar muchos nodos abiertos.
+- **`LinkedHashMap`** para la respuesta: los sobrevivientes salen en orden (1, 2, 3, …).
+- El estado va en un objeto `Busqueda` por llamada, porque el `@Component` es singleton.
+
+---
+
 ## Errores
 
 Los errores se devuelven como JSON desde `config/ManejadorDeErrores`, nunca como stack trace.
@@ -1236,11 +1561,9 @@ pasa con `/api/grafo/dfs?origen=XXX`.
 
 ## Pendientes
 
-Endpoints cableados cuyos algoritmos todavía no están implementados (responden 501). Su ficha se
-escribe cuando estén implementados y probados.
+Endpoints cableados cuyo algoritmo no está implementado (responden 501). UCS es **opcional** en la
+consigna y no suma punto: no se implementa.
 
 | Método y ruta | Parámetros | Algoritmo |
 |---|---|---|
 | `GET /api/grafo/ucs` | `origen` (String), `destino` (String) | UCS (opcional) |
-| `GET /api/grafo/rutas` | `origen` (String), `destino` (String), `costoMaximo` (double, default 1000), `saltosMaximos` (int, default 10) | Backtracking |
-| `GET /api/seleccion/repartir` | `contenedores` (int, ≥ 1) | Branch & Bound |

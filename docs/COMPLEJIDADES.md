@@ -6,6 +6,8 @@ completa de cada fila, con el ejemplo real, está en la ficha del endpoint en
 
 Notación: **V** = lugares (vértices), **E** = calles (aristas); en nuestro grafo V = 12 y E = 21.
 **n** = cantidad de elementos a ordenar o de suministros; **W** = capacidad de la mochila en kg.
+**b** = grado máximo de un lugar; **R** = rutas encontradas; **k** = contenedores pedidos y
+**m** = min(k, n) contenedores efectivos.
 
 ## Método para resolver recurrencias (clase 1)
 
@@ -46,8 +48,8 @@ se hace fuera de las llamadas (partir y combinar).
 | Greedy (mochila 0/1 por ratio) | `/api/seleccion/greedy` | No es recursivo. Lo domina el MergeSort: T(n) = 2T(n/2) + O(n) → O(n log n); después un recorrido O(n). | O(n log n) | O(n) | MergeSort propio (estable) + `ArrayList` |
 | Mochila 0/1 con PD | `/api/seleccion/dinamica` | dp[i][j] = max(dp[i−1][j], dp[i−1][j − pᵢ] + vᵢ) (si pᵢ ≤ j). Sin tabla, la recursión es T(n) = 2T(n − 1) + O(1): sustracción con a = 2 > 1 → O(2ⁿ). Con tabla, cada uno de los (n + 1)(W + 1) subproblemas se calcula una vez en O(1). | O(n · W), **pseudopolinómica**; W = min(capacidad, Σ pesos) | O(n · W) | Matriz `double[n+1][W+1]` (tabla dp) + `boolean[] tomado` para la recuperación |
 | Greedy vs. PD | `/api/seleccion/comparar` | No aplica: corre los dos. | O(n log n + n · W) | O(n · W) | Las de cada técnica |
-| Backtracking (rutas simples) | `/api/grafo/rutas` | *Pendiente* | *Pendiente* | *Pendiente* | *Pendiente* |
-| Branch & Bound (reparto en k contenedores) | `/api/seleccion/repartir` | *Pendiente* | *Pendiente* | *Pendiente* | *Pendiente* |
+| Backtracking (rutas simples) | `/api/grafo/rutas` | T(L) = b · T(L − 1) + O(b), con b = grado máximo y L = min(saltosMaximos, V − 1); sustracción con a = b > 1 → O(b^L). Peor caso (grafo completo, sin límites efectivos): ≤ e · (V − 1)! caminos simples → O(V!). | Con poda O(b^L) + O(R · V) por copiar las R rutas; la corrida sin poda (que el endpoint también hace para contar) recorre todos los caminos simples: O(b^(V − 1)), peor O(V!), y domina el endpoint | O(V) + salida O(R · V) (pila ≤ V + 1, camino ≤ V) | `boolean[] visitado` (marcar/desmarcar O(1)), `ArrayList` como pila del camino, recursión, lista de adyacencia |
+| Branch & Bound (reparto en k contenedores) | `/api/seleccion/repartir` | T(n) = m · T(n − 1) + O(m), con m = min(k, n); sustracción con a = m > 1 → O(m^n). Árbol completo: (m^(n+1) − 1) / (m − 1) nodos (k = 1: n + 1). | O(m^n) en el peor caso, + O(n) por cada mejora; la cota y la ruptura de simetría lo reducen mucho (k = 3: 61 de 9841 nodos) | O(n) (pila n + 1, `cargas` m ≤ n) + salida O(n + m) | Arreglo `double[] cargas` (sumar/restar O(1)), `int[] asignacion` y `mejorAsignacion`, recursión DFS, `LinkedHashMap` de salida |
 
 ## Notas para el oral
 
@@ -61,3 +63,8 @@ se hace fuera de las llamadas (partir y combinar).
 - **Floyd vs. Dijkstra V veces:** O(V³) contra O(V (V + E) log V). En grafos dispersos (E ≈ V,
   como un mapa de calles) gana Dijkstra, O(V² log V); en densos (E ≈ V²) gana Floyd. Floyd además
   acepta aristas negativas y detecta ciclos negativos.
+- **Backtracking y Branch & Bound son exponenciales en el peor caso.** La poda no cambia el orden
+  del peor caso, cambia cuánto del árbol se recorre en la práctica: en `/rutas` (RET → CUN, 150 min,
+  4 tramos) 118 nodos contra 684, y en `/repartir` (k = 3) 61 contra 9841. Backtracking poda por
+  **viabilidad** (la rama ya no puede dar una ruta válida); Branch & Bound poda por **optimalidad**
+  (la cota optimista dice que la rama no puede mejorar la mejor solución conocida).

@@ -29,6 +29,15 @@ GET http://localhost:8080/api/seleccion/greedy?capacidad=12
 GET http://localhost:8080/api/seleccion/dinamica?capacidad=12
 GET http://localhost:8080/api/seleccion/comparar?capacidad=12
 
-### Backtracking y Branch and Bound
+### Backtracking    (esperado: 4 rutas, 118 nodos con poda / 684 sin poda)
 GET http://localhost:8080/api/grafo/rutas?origen=RET&destino=CUN&costoMaximo=150&saltosMaximos=4
+### (esperado: 1 ruta RET-PAL-MON-CUN de 129, 144 / 684)
+GET http://localhost:8080/api/grafo/rutas?origen=RET&destino=CUN&costoMaximo=130&saltosMaximos=5
+### (esperado: 400 "El costo maximo no puede ser negativo: -5.0")
+GET http://localhost:8080/api/grafo/rutas?origen=RET&destino=CUN&costoMaximo=-5
+
+### Branch and Bound    (esperado: k=3 carga 11, 61 explorados / 87 podados; k=2 carga 17, 84 / 74)
 GET http://localhost:8080/api/seleccion/repartir?contenedores=3
+GET http://localhost:8080/api/seleccion/repartir?contenedores=2
+### (esperado: 400 "La cantidad de contenedores debe ser al menos 1: 0")
+GET http://localhost:8080/api/seleccion/repartir?contenedores=0

@@ -16,6 +16,8 @@ alcanzado. En **negrita**, los vértices ya extraídos (su valor es definitivo).
 3. [Prim desde RET](#3-prim-desde-ret)
 4. [Greedy vs. mochila 0/1 con PD](#4-greedy-vs-mochila-01-con-pd)
 5. [Floyd-Warshall](#5-floyd-warshall)
+6. [Backtracking: rutas simples](#6-backtracking-rutas-simples)
+7. [Branch & Bound: reparto en k contenedores](#7-branch--bound-reparto-en-k-contenedores)
 
 ---
 
@@ -453,3 +455,229 @@ d[C][A] = 1, diagonal 0, el resto ∞.
 - k = C: d[A][A] = d[A][C] + d[C][A] = −2 + 1 = **−1** (y d[B][B] = −3 + 2 = −1).
 
 Al terminar hay valores negativos en la diagonal → ciclo negativo detectado.
+
+---
+
+## 6. Backtracking: rutas simples
+
+Lo que pide el hito 8: **reportar nodos explorados con poda y sin poda**. Endpoint
+[`/api/grafo/rutas`](ENDPOINTS.md#get-apigraforutas), test `BacktrackingTest`.
+
+**Nodo explorado** = cada entrada a la función recursiva (raíz incluida), es decir, cada camino
+parcial que se llega a considerar. **Con poda:** no se baja a un vecino si el costo acumulado
+superaría `costoMaximo` o los tramos superarían `saltosMaximos` (poda por viabilidad). **Sin poda:**
+solo se respeta el camino simple y el filtro se aplica recién al llegar al destino.
+
+### 6.1 Tabla de nodos explorados
+
+| Grafo | Origen → destino | costoMaximo / saltosMaximos | Rutas | Con poda | Sin poda | Ahorro |
+|---|---|---|---|---|---|---|
+| Semilla cátedra, **dirigida** | A → H | 25 / 10 | 6 | 26 | 38 | 32 % |
+| Semilla cátedra, no dirigida | A → H | 25 / 10 | 6 | 37 | 78 | 53 % |
+| Semilla cátedra, no dirigida | A → H | 25 / 5 | 5 | 36 | 78 | 54 % |
+| Semilla cátedra, no dirigida | A → H | 25 / 4 | 2 | 30 | 78 | 62 % |
+| Dominio CABA | RET → CUN | 150 / 4 | 4 | 118 | 684 | 83 % |
+| Dominio CABA | RET → CUN | 130 / 5 | 1 | 144 | 684 | 79 % |
+| Dominio CABA | CON → PCE | 90 / 4 | 3 | 42 | 684 | 94 % |
+| Dominio CABA | OBE → HIT | 80 / 3 | 4 | 34 | 333 | 90 % |
+| Dominio CABA | RET → CUN | 110 / 3 | 0 | 47 | 684 | 93 % |
+| Dominio CABA | RET → CUN | 1000 / 10 | 110 | 682 | 684 | 0,3 % |
+
+Todos los valores los verifica `BacktrackingTest`; el caso RET → CUN 150 / 4 coincide con la salida
+real del endpoint.
+
+Lectura:
+- **Con y sin poda devuelven las mismas rutas** (lo verifica `conYSinPodaDevuelvenLasMismasRutas`):
+  con costos ≥ 0 el costo acumulado nunca baja y los tramos solo suben, así que una rama podada no
+  podía terminar en una ruta válida.
+- **Sin poda la cantidad no depende de los límites**: para RET → CUN siempre son 684 nodos (todos
+  los caminos simples que salen de RET sin atravesar CUN, más los que terminan en CUN). Para
+  OBE → HIT son 333.
+- **Cuanto más ajustados los límites, más poda.** Con 1000 / 10 casi no se ahorra: el camino simple
+  más largo de RET a CUN tarda 327 minutos, así que el límite de costo nunca corta, y el de 10 tramos
+  solo corta los 2 caminos de 11 tramos que pasan por los 12 lugares (684 − 2 = 682).
+- Con 130 / 5 se exploran **más** nodos que con 150 / 4 (144 contra 118) aunque el tiempo máximo sea
+  menor: el límite de tramos más holgado deja bajar un nivel más en muchas ramas.
+- En la semilla no dirigida aparecen caminos como A – C – B – D – …, que no existen en la dirigida:
+  el árbol sin poda crece de 38 a 78 nodos, aunque las rutas válidas sean las mismas 6 (todas las
+  nuevas superan 25 minutos).
+
+### 6.2 Traza a mano: semilla de la cátedra dirigida, A → H, costoMaximo = 25, saltosMaximos = 10
+
+Aristas (en el orden de las listas de adyacencia): A → B 4, A → C 9, B → C 3, B → D 7, C → D 2,
+C → E 11, D → E 5, D → F 8, E → F 6, E → G 10, F → H 3, G → H 4.
+
+El límite de 10 tramos nunca se activa (el camino más largo tiene 6), así que todas las podas son
+por costo. Cada línea numerada es un nodo explorado (`#n`) con el costo acumulado entre paréntesis;
+`✂` es un hijo que **no se abre** porque `costo + arista > 25`.
+
+```
+#1  A (0)
+#2  ├─ B (4)
+#3  │  ├─ C (7)
+#4  │  │  ├─ D (9)
+#5  │  │  │  ├─ E (14)
+#6  │  │  │  │  ├─ F (20)
+#7  │  │  │  │  │  └─ H (23)            RUTA A-B-C-D-E-F-H = 23
+#8  │  │  │  │  └─ G (24)
+    │  │  │  │     └─ ✂ H: 24 + 4 = 28
+#9  │  │  │  └─ F (17)
+#10 │  │  │     └─ H (20)               RUTA A-B-C-D-F-H = 20
+#11 │  │  └─ E (18)
+#12 │  │     ├─ F (24)
+    │  │     │  └─ ✂ H: 24 + 3 = 27
+    │  │     └─ ✂ G: 18 + 10 = 28
+#13 │  └─ D (11)
+#14 │     ├─ E (16)
+#15 │     │  ├─ F (22)
+#16 │     │  │  └─ H (25)            RUTA A-B-D-E-F-H = 25
+    │     │  └─ ✂ G: 16 + 10 = 26
+#17 │     └─ F (19)
+#18 │        └─ H (22)               RUTA A-B-D-F-H = 22
+#19 └─ C (9)
+#20    ├─ D (11)
+#21    │  ├─ E (16)
+#22    │  │  ├─ F (22)
+#23    │  │  │  └─ H (25)            RUTA A-C-D-E-F-H = 25
+       │  │  └─ ✂ G: 16 + 10 = 26
+#24    │  └─ F (19)
+#25    │     └─ H (22)               RUTA A-C-D-F-H = 22
+#26    └─ E (20)
+          ├─ ✂ F: 20 + 6 = 26
+          └─ ✂ G: 20 + 10 = 30
+```
+
+**Con poda: 26 nodos y 6 rutas**, en el mismo orden que devuelve el algoritmo (test
+`semillaDirigida`). Una ruta de costo exactamente 25 se acepta (la condición es `≤`).
+
+**Sin poda: 38 nodos.** Se exploran los 8 hijos podados y, debajo de ellos, todo lo que cuelga:
+12 nodos más (38 − 26).
+
+| Nodo que la poda evita | Costo | Qué pasa sin poda |
+|---|---|---|
+| A-B-C-D-E-G-H | 28 | llega a H y se descarta al llegar |
+| A-B-C-E-F-H | 27 | llega a H y se descarta al llegar |
+| A-B-C-E-G | 28 | se explora |
+| A-B-C-E-G-H | 32 | llega a H y se descarta al llegar |
+| A-B-D-E-G | 26 | se explora |
+| A-B-D-E-G-H | 30 | llega a H y se descarta al llegar |
+| A-C-D-E-G | 26 | se explora |
+| A-C-D-E-G-H | 30 | llega a H y se descarta al llegar |
+| A-C-E-F | 26 | se explora |
+| A-C-E-F-H | 29 | llega a H y se descarta al llegar |
+| A-C-E-G | 30 | se explora |
+| A-C-E-G-H | 34 | llega a H y se descarta al llegar |
+
+Ninguno de los 12 da una ruta válida: las 7 llegadas a H superan los 25 minutos. Por eso las dos
+corridas devuelven las mismas 6 rutas.
+
+**Retroceso:** al volver de #7 se desmarca H, y al volver de #6 se desmarca F; por eso F se puede
+volver a usar en #9 por otro camino (A-B-C-D-F). Lo mismo con D, que se usa en #4 (desde C) y en #13
+(desde B). Si quedaran marcados, como en un DFS, solo se encontraría la primera ruta.
+
+---
+
+## 7. Branch & Bound: reparto en k contenedores
+
+Lo que pide el hito 11: **explicitar cuál es la cota y por qué es optimista, y reportar los nodos
+podados**. Endpoint [`/api/seleccion/repartir`](ENDPOINTS.md#get-apiseleccionrepartir), test
+`RamificacionYPodaTest`.
+
+Suministros en orden de id (kg): S1 3, S2 4, S3 7, S4 1, S5 2, S6 5, S7 6, S8 5. **Total 33 kg**,
+n = 8, m = min(k, n) contenedores efectivos.
+
+### 7.1 La cota
+
+```
+cota(hijo) = max( carga máxima después de ubicar el ítem , peso total / m )
+```
+
+Es una **cota inferior optimista** del makespan que se puede alcanzar desde ese nodo:
+- las cargas solo crecen (pesos ≥ 0), así que el contenedor más cargado hoy pesa al menos eso al
+  final;
+- en cualquier reparto completo, el más cargado lleva al menos el promedio total / m (si k ≥ n,
+  total / n ≤ el ítem más pesado ≤ óptimo, así que también vale).
+
+Nunca sobreestima: si `cota >= mejor`, ningún reparto de esa rama puede mejorar a la mejor solución
+conocida y se poda **sin perder el óptimo**. El óptimo se verifica contra fuerza bruta
+(`optimoCoincideConFuerzaBruta`, k = 2, 3, 4, probando los k^n repartos).
+
+### 7.2 Tabla por k
+
+| k | Cota inicial (33 / m) | Carga máxima óptima | Explorados | Podados | Árbol completo sin poda (m^(n+1) − 1) / (m − 1) |
+|---|---|---|---|---|---|
+| 1 | 33 | 33 | 9 | 0 | 9 (un solo camino) |
+| 2 | 16,5 | **17** | 84 | 74 | 511 |
+| 3 | 11 | **11** | 61 | 87 | 9841 |
+| 4 | 8,25 | **9** | 123 | 291 | 87381 |
+| 8 | 4,125 | 7 | 50 | 72 | — |
+| 9 o más | 4,125 (m = 8) | 7 | 50 | 72 | — |
+
+- **k = 1:** un solo hijo por nivel: 9 nodos y nada que podar (`mejor` es +∞ hasta la única hoja).
+- **k = 2:** la cota 16,5 no se alcanza porque los pesos son enteros; el óptimo es 17. La cota es
+  optimista, no necesariamente alcanzable.
+- **k = 3:** hay un reparto perfecto (3 + 7 + 1, 4 + 2 + 5, 6 + 5): el óptimo **alcanza la cota** y
+  desde ese momento todo se poda. 61 nodos contra 9841 del árbol completo (0,6 %).
+- **k = 4:** 33 / 4 = 8,25 pero el óptimo es 9: con pesos enteros las cargas son enteras, y cuatro
+  contenedores de 8 kg suman 32 < 33, así que alguno lleva 9 o más. Lo mismo explica el 17 de k = 2.
+- **k ≥ 8:** el óptimo es el ítem más pesado (S3, 7 kg), porque ningún reparto puede bajar de eso.
+  El reparto devuelto es el primero que llega a 7 (S1+S2 = 7 kg juntos, Sobrevivientes 7 y 8
+  vacíos); los demás repartos de 7 se podan por `>=`. Con k = 9 o
+  k = 1.000.000 se usan solo m = 8 contenedores y los contadores son los mismos que con k = 8.
+- Efecto de cada técnica en k = 3: árbol completo 9841 nodos; solo con ruptura de simetría, 1645;
+  con simetría + cota, **61**. (El 1645 sale de simular el mismo recorrido sin la cota; el 61 lo
+  verifica el test.)
+
+### 7.3 Traza parcial, k = 2 (cota inicial 16,5)
+
+Cada fila numerada es un nodo explorado; `✂` es un hijo podado. `Cargas` es el estado después de
+ubicar el ítem. El primer ítem va siempre al contenedor 1 (ruptura de simetría: un contenedor vacío
+solo se prueba si es el primero vacío).
+
+| Nodo | Decisión | Cargas [C1, C2] | Cota del hijo vs. `mejor` | Resultado |
+|---|---|---|---|---|
+| 1 | raíz | [0, 0] | — | |
+| 2–9 | S1 … S8 → C1 | [33, 0] | todas < +∞ | hoja: **mejor = 33** |
+| 10 | S8 → C2 | [28, 5] | max(28; 16,5) = 28 < 33 | hoja: **mejor = 28** |
+| 11 | S7 → C2 | [22, 6] | 22 < 28 | |
+| 12 | S8 → C1 | [27, 6] | 27 < 28 | hoja: **mejor = 27** |
+| 13 | S8 → C2 | [22, 11] | 22 < 27 | hoja: **mejor = 22** |
+| 14 | S6 → C2 | [17, 5] | 17 < 22 | |
+| ✂ | S7 → C1 | [23, 5] | 23 ≥ 22 | **podado** (1) |
+| 15 | S7 → C2 | [17, 11] | 17 < 22 | |
+| ✂ | S8 → C1 | [22, 11] | 22 ≥ 22 | **podado** (2) |
+| 16 | S8 → C2 | [17, 16] | 17 < 22 | hoja: **mejor = 17** |
+| 17 | S5 → C2 | [15, 2] | 15 < 17 | |
+| ✂ | S6 → C1 | [20, 2] | 20 ≥ 17 | **podado** (3) |
+| 18 | S6 → C2 | [15, 7] | 15 < 17 | |
+| ✂ | S7 → C1 | [21, 7] | 21 ≥ 17 | **podado** (4) |
+| 19 | S7 → C2 | [15, 13] | 15 < 17 | |
+| ✂ | S8 → C1 | [20, 13] | 20 ≥ 17 | **podado** (5) |
+| ✂ | S8 → C2 | [15, 18] | 18 ≥ 17 | **podado** (6) |
+
+`mejor` baja 33 → 28 → 27 → 22 → **17** en los primeros 16 nodos. Después ninguna hoja mejora (con
+pesos enteros 17 es el óptimo), pero cada hijo con cota ≥ 17 se corta: la rama del nodo 17 se
+cierra después de 3 nodos y 4 podas sin llegar a ninguna hoja. Al terminar: **84 explorados, 74
+podados, carga máxima 17** (S1–S5 = 17 kg, S6–S8 = 16 kg), igual que el endpoint y el test
+`dosContenedores`.
+
+Diferencia con el backtracking de rutas: los repartos podados **eran válidos** (todo reparto lo
+es); se podan porque no pueden ser **mejores** (poda por optimalidad, no por viabilidad).
+
+### 7.4 Cómo baja `mejor` con k = 3 (cota inicial 11)
+
+| Nodo explorado | Hoja encontrada (cargas) | `mejor` | Podados hasta ahí |
+|---|---|---|---|
+| 9 | [33, 0, 0] | 33 | 0 |
+| 10 | [28, 5, 0] | 28 | 0 |
+| 12 | [27, 6, 0] | 27 | 0 |
+| 13 | [22, 11, 0] | 22 | 0 |
+| 16 | [17, 16, 0] | 17 | 3 |
+| 20 | [15, 13, 5] | 15 | 9 |
+| 25 | [14, 14, 5] | 14 | 16 |
+| 31 | [10, 12, 11] | 12 | 24 |
+| 61 | [11, 11, 11] | **11** | 81 |
+
+En el nodo 61 `mejor` = 11 = cota inicial. Desde ahí todo hijo tiene cota ≥ 11 = `mejor` y se poda
+(6 podas más, 87 en total) sin explorar ningún nodo nuevo: el algoritmo termina con la **prueba** de
+que 11 es óptimo sin recorrer el resto del árbol.
