@@ -134,6 +134,7 @@ números en [`docs/VERIFICACIONES.md`](docs/VERIFICACIONES.md#4-greedy-vs-mochil
 | BFS | `GET /api/grafo/bfs` | ¿Qué lugares se alcanzan desde acá, por cantidad de tramos? | Implementado |
 | DFS | `GET /api/grafo/dfs` | ¿Qué lugares se alcanzan desde acá, recorriendo en profundidad? | Implementado |
 | Dijkstra | `GET /api/grafo/dijkstra` | Ruta más rápida (en minutos) entre dos refugios | Implementado |
+| UCS | `GET /api/grafo/ucs` | Ruta más rápida entre dos refugios, cortando apenas el destino sale de la cola (compara nodos expandidos contra Dijkstra) | Implementado |
 | Floyd-Warshall | `GET /api/grafo/floyd`, `/floyd/camino`, `/floyd/comparacion` | Tabla de tiempos mínimos entre todos los lugares, ruta entre dos lugares y comparación con Dijkstra | Implementado |
 | Prim / Kruskal (Union-Find) | `GET /api/grafo/prim`, `/kruskal` | Mínimo de calles a despejar para conectar todos los refugios | Implementado |
 | Backtracking | GET /api/grafo/rutas | Rutas de escape con tiempo máximo y cantidad máxima de paradas (informa nodos explorados con y sin poda) | Implementado |
@@ -148,6 +149,23 @@ Kruskal paso a paso, greedy vs. mochila PD, Floyd, nodos con y sin poda del back
 [`docs/VERIFICACIONES.md`](docs/VERIFICACIONES.md). La tabla de complejidades de todos los
 algoritmos (recurrencias, temporal, espacial y estructura) está en
 [`docs/COMPLEJIDADES.md`](docs/COMPLEJIDADES.md).
+
+Dijkstra (`/api/grafo/dijkstra`) y las rutas de escape (`/api/grafo/rutas`) aceptan además el
+parámetro opcional `infectados` (ej. `infectados=MON,REC`): lugares que la ruta no puede pisar.
+
+Para comprobar en un par de minutos que todo funciona, en
+[`docs/PRUEBA-RAPIDA.md`](docs/PRUEBA-RAPIDA.md) hay URLs con su resultado esperado. Los términos
+técnicos que usamos (relajación, UCS, Union-Find, poda por viabilidad y por optimalidad, cota
+optimista, etc.) están explicados en [`docs/GLOSARIO.md`](docs/GLOSARIO.md).
+
+## Demo visual
+
+Con la aplicación levantada (`docker compose up -d` y `./mvnw spring-boot:run` con el `.env` cargado),
+entrar a **http://localhost:8080/**. La página muestra el mapa de CABA con los 12 lugares y las calles
+con su costo en minutos, y una pestaña por algoritmo (BFS/DFS, Dijkstra/Floyd, Prim/Kruskal,
+Floyd vs. Dijkstra, Backtracking, Mochila, Branch & Bound y Ordenamiento) que llama al endpoint real
+y resalta el resultado en el mapa. Es un único `index.html` sin dependencias externas: **no requiere
+internet**.
 
 ---
 
