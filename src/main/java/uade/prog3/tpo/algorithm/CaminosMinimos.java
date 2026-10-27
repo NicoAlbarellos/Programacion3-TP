@@ -34,6 +34,16 @@ public class CaminosMinimos {
     public record Comparacion(int vertices, long operacionesFloyd,
                               long nodosExpandidosDijkstra, long aristasExaminadasDijkstra) { }
 
+    /**
+     * Resultado de UCS: el camino (igual al de Dijkstra) y cuantos nodos expandio cada uno
+     * sobre la MISMA consulta, para mostrar lo que ahorra la parada temprana.
+     */
+    public record ResultadoUcs(List<String> vertices, double costoTotal,
+                               long nodosExpandidosUcs, long nodosExpandidosDijkstra) { }
+
+    /** Valor de "destino" para que el nucleo NO corte: arbol completo (Dijkstra). */
+    private static final int SIN_DESTINO = -1;
+
     /** Entrada de la cola de prioridad: un vertice con la distancia con que se encolo. */
     private record EnCola(int vertice, double distancia) { }
 
@@ -73,19 +83,26 @@ public class CaminosMinimos {
         int destino = grafo.indiceDe(destinoId);
         validarCostosNoNegativos(grafo);
 
-        ArbolDeCaminos arbol = arbolDesde(grafo, origen);
-        if (arbol.dist()[destino] == Grafo.INFINITO) {
-            throw new IllegalStateException("No hay camino de " + origenId + " a " + destinoId);
-        }
+        ArbolDeCaminos arbol = arbolDesde(grafo, origen, SIN_DESTINO);
+        verificarAlcanzable(arbol, destino, origenId, destinoId);
         return new Camino(reconstruirCamino(grafo, arbol.previo(), destino), arbol.dist()[destino]);
     }
 
+    private void verificarAlcanzable(ArbolDeCaminos arbol, int destino, String origenId, String destinoId) {
+        if (arbol.dist()[destino] == Grafo.INFINITO) {
+            throw new IllegalStateException("No hay camino de " + origenId + " a " + destinoId);
+        }
+    }
+
     /**
-     * Nucleo de Dijkstra: arbol de caminos minimos desde el origen, con contadores.
+     * Nucleo comun de Dijkstra y UCS: caminos minimos desde el origen, con contadores.
      * nodosExpandidos cuenta las extracciones VALIDAS (no las entradas viejas descartadas);
      * aristasExaminadas, las aristas que se miran al expandir cada nodo.
+     *
+     * destino = SIN_DESTINO: Dijkstra, arbol completo.
+     * destino = un vertice: UCS, corta cuando ese vertice SALE de la cola.
      */
-    private ArbolDeCaminos arbolDesde(Grafo grafo, int origen) {
+    private ArbolDeCaminos arbolDesde(Grafo grafo, int origen, int destino) {
         int n = grafo.cantidadVertices();
         double[] dist = new double[n];
         int[] previo = new int[n];
@@ -104,6 +121,9 @@ public class CaminosMinimos {
                 continue; // entrada vieja: u ya se proceso con una distancia menor
             }
             nodosExpandidos++;
+            if (u == destino) {
+                break; // UCS: al SACAR el destino su dist[] ya es definitiva; lo que queda cuesta >=
+            }
             aristasExaminadas += grafo.vecinos(u).size();
             relajarVecinos(grafo, u, dist, previo, cola);
         }
@@ -136,7 +156,7 @@ public class CaminosMinimos {
         for (int u = 0; u < grafo.cantidadVertices(); u++) {
             for (Grafo.Arista arista : grafo.vecinos(u)) {
                 if (arista.costo() < 0) {
-                    throw new IllegalArgumentException("Dijkstra no admite costos negativos: "
+                    throw new IllegalArgumentException("Dijkstra/UCS no admiten costos negativos: "
                             + grafo.idDe(u) + "-" + grafo.idDe(arista.destino()) + " cuesta " + arista.costo());
                 }
             }
@@ -267,7 +287,7 @@ public class CaminosMinimos {
         long nodosExpandidos = 0;
         long aristasExaminadas = 0;
         for (int origen = 0; origen < grafo.cantidadVertices(); origen++) {
-            ArbolDeCaminos arbol = arbolDesde(grafo, origen);
+            ArbolDeCaminos arbol = arbolDesde(grafo, origen, SIN_DESTINO);
             nodosExpandidos += arbol.nodosExpandidos();
             aristasExaminadas += arbol.aristasExaminadas();
         }
@@ -275,13 +295,35 @@ public class CaminosMinimos {
     }
 
     /**
-     * UCS (Uniform Cost Search): igual que Dijkstra pero con parada temprana
-     * al expandir el destino.
+     * UCS (Uniform Cost Search): Dijkstra que sabe cuando parar.
+     * Misma cola de prioridad por costo acumulado g(n), pero termina cuando el destino
+     * SALE de la cola (no cuando se descubre: al descubrirlo todavia puede haber un camino
+     * mas barato en la cola; al sacarlo ya no, todo lo que queda cuesta lo mismo o mas).
+     * Por eso da el mismo costo que Dijkstra expandiendo igual o menos nodos.
      *
-     * OPCIONAL. Si se implementa, en el coloquio hay que poder mostrar la diferencia de
-     * nodos expandidos respecto de Dijkstra sobre la misma consulta.
+     * Para comparar, tambien corre Dijkstra completo sobre la misma consulta y devuelve
+     * los nodos expandidos de los dos.
+     *
+     * Relacion con A*: A* es UCS con prioridad f(n) = g(n) + h(n), con h admisible
+     * (nunca sobreestima lo que falta). Con h = 0, A* es exactamente UCS.
+     *
+     * Complejidad: O((V + E) log V) en el peor caso, igual que Dijkstra (si el destino
+     * es el ultimo en salir de la cola, o es inalcanzable, se expande todo). En la
+     * practica expande solo los nodos con g(n) menor o igual al costo del destino.
+     * Correr ademas Dijkstra para la comparacion no cambia el orden. Espacio: O(V + E).
+     *
+     * @throws IllegalArgumentException si origen o destino no existen, o hay costos negativos
+     * @throws IllegalStateException    si el destino no es alcanzable desde el origen
      */
-    public Camino ucs(Grafo grafo, String origenId, String destinoId) {
-        throw new PendienteDeImplementar("UCS");
+    public ResultadoUcs ucs(Grafo grafo, String origenId, String destinoId) {
+        int origen = grafo.indiceDe(origenId);
+        int destino = grafo.indiceDe(destinoId);
+        validarCostosNoNegativos(grafo);
+
+        ArbolDeCaminos arbol = arbolDesde(grafo, origen, destino);
+        verificarAlcanzable(arbol, destino, origenId, destinoId);
+        long expandidosDijkstra = arbolDesde(grafo, origen, SIN_DESTINO).nodosExpandidos();
+        return new ResultadoUcs(reconstruirCamino(grafo, arbol.previo(), destino), arbol.dist()[destino],
+                arbol.nodosExpandidos(), expandidosDijkstra);
     }
 }

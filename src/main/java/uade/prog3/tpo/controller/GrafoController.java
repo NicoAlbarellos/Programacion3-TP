@@ -15,7 +15,7 @@ import java.util.Map;
  * Endpoints de los algoritmos sobre grafos.
  *
  * Cada endpoint carga el grafo (no dirigido, ver DIRIGIDO) y delega en la
- * clase de algoritmo correspondiente. UCS es opcional y responde 501.
+ * clase de algoritmo correspondiente. UCS devuelve ademas los nodos expandidos contra Dijkstra.
  *
  * Los controllers NO contienen logica algoritmica: toda va en el paquete algorithm.
  */
@@ -96,7 +96,7 @@ public class GrafoController {
 
     /** GET /api/grafo/ucs?origen=RET&destino=CUN */
     @GetMapping("/ucs")
-    public CaminosMinimos.Camino ucs(@RequestParam String origen, @RequestParam String destino) {
+    public CaminosMinimos.ResultadoUcs ucs(@RequestParam String origen, @RequestParam String destino) {
         return caminosMinimos.ucs(grafoService.cargar(DIRIGIDO), origen, destino);
     }
 
