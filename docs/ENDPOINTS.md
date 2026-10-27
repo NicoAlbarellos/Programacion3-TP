@@ -8,7 +8,7 @@ grafo V = 12 y E = 21. El costo de una arista son **minutos a pie**.
 
 Los ejemplos se obtuvieron corriendo la aplicación contra Neo4j con la carga inicial
 (`seed/CargaInicial.java`), salvo donde la ficha indica otra cosa. Los cálculos a mano que
-verifican Dijkstra, Prim, Kruskal, greedy vs. PD y Floyd están en
+verifican Dijkstra, Prim, Kruskal, greedy vs. PD, Floyd y UCS están en
 [`VERIFICACIONES.md`](VERIFICACIONES.md). La tabla resumen de complejidades está en
 [`COMPLEJIDADES.md`](COMPLEJIDADES.md).
 
@@ -18,6 +18,7 @@ verifican Dijkstra, Prim, Kruskal, greedy vs. PD y Floyd están en
 - [GET /api/grafo/bfs](#get-apigrafobfs) — BFS
 - [GET /api/grafo/dfs](#get-apigrafodfs) — DFS
 - [GET /api/grafo/dijkstra](#get-apigrafodijkstra) — Dijkstra
+- [GET /api/grafo/ucs](#get-apigrafoucs) — UCS (Dijkstra con parada temprana; opcional)
 - [GET /api/grafo/floyd](#get-apigrafofloyd) — Floyd-Warshall
 - [GET /api/grafo/floyd/camino](#get-apigrafofloydcamino) — Floyd con reconstrucción del camino
 - [GET /api/grafo/floyd/comparacion](#get-apigrafofloydcomparacion) — Floyd vs. Dijkstra V veces
@@ -32,7 +33,6 @@ verifican Dijkstra, Prim, Kruskal, greedy vs. PD y Floyd están en
 - [GET /api/seleccion/repartir](#get-apiseleccionrepartir) — Branch & Bound (reparto en k contenedores)
 - [GET /api/mapa](#get-apimapa) — datos del mapa para la demo visual (no es un algoritmo)
 - [Errores](#errores)
-- [Pendientes](#pendientes)
 
 ---
 
@@ -291,7 +291,7 @@ GET /api/grafo/dijkstra?origen=PAL&destino=XXX
 | Situación | Código | `detalle` |
 |---|---|---|
 | `origen` o `destino` inexistente | 400 | `No existe el nodo con id: XXX` |
-| Alguna calle con costo negativo | 400 | `Dijkstra no admite costos negativos: ...` |
+| Alguna calle con costo negativo | 400 | `Dijkstra/UCS no admiten costos negativos: ...` |
 | El destino no es alcanzable desde el origen | 422 | `No hay camino de X a Y` |
 
 El caso inalcanzable no se puede provocar con los datos actuales (el grafo es conexo): está
@@ -315,7 +315,7 @@ que además detecta ciclos negativos.) En el dominio no pasa: los costos son min
 
 **Detalle de comportamiento:** el algoritmo calcula el árbol de caminos mínimos completo desde el
 origen y **no corta** cuando extrae el destino. Cortar al expandir el destino es justamente la
-diferencia de UCS.
+diferencia de [UCS](#get-apigrafoucs).
 
 **Complejidad temporal: O((V + E) log V).**
 - **Eliminación perezosa en lugar de decreaseKey.** `java.util.PriorityQueue` no tiene
@@ -346,6 +346,162 @@ E + 1 entradas) y el camino reconstruido (≤ V).
   `previo[]` guarda el árbol de caminos mínimos; el camino se reconstruye recorriéndolo desde el
   destino hacia atrás (insertando al principio de un `ArrayDeque`, O(1) por paso).
 - **Lista de adyacencia**: relajar los vecinos de u cuesta O(grado(u)).
+
+---
+
+## GET /api/grafo/ucs
+
+**UCS (Uniform Cost Search): Dijkstra que sabe cuándo parar** (clase 13). En el dominio: la
+**ruta más rápida a pie** entre dos lugares, igual que `/dijkstra`, pero dejando de buscar apenas
+la ruta al destino es definitiva. Devuelve además cuántos lugares tuvo que expandir UCS y cuántos
+expande Dijkstra completo en la misma consulta, para mostrar lo que ahorra la parada temprana.
+Es **opcional** en la consigna (no suma punto propio).
+
+Implementación: `CaminosMinimos.ucs` (`algorithm/CaminosMinimos.java`). No duplica el bucle de
+Dijkstra: los dos usan el mismo núcleo `arbolDesde(grafo, origen, destino)`; Dijkstra lo llama con
+`SIN_DESTINO` (−1, nunca corta) y UCS con el índice del destino. Test: `UcsTest`.
+
+**Parámetros**
+
+| Nombre | Tipo | Obligatorio | Significado |
+|---|---|---|---|
+| `origen` | String | sí | Id del lugar de partida (ej. `PAL`). |
+| `destino` | String | sí | Id del lugar de llegada (ej. `CUN`). |
+
+**Respuesta**
+
+| Campo | Significado |
+|---|---|
+| `vertices` | Lugares del camino en orden (incluye origen y destino). Igual al de `/dijkstra`. |
+| `costoTotal` | Minutos a pie del camino. Igual al de `/dijkstra`. |
+| `nodosExpandidosUcs` | Lugares que UCS sacó de la cola y procesó, contando el destino (con el que corta). |
+| `nodosExpandidosDijkstra` | Lugares que expande Dijkstra completo desde el mismo origen (en un grafo conexo, siempre V = 12). |
+
+**Nodo expandido** = extracción **válida** de la cola: el lugar sale con su distancia vigente y se
+miran sus vecinos. Las entradas viejas que se descartan (eliminación perezosa) no cuentan. El
+destino cuenta como expandido aunque no se miren sus vecinos.
+
+**Ejemplos**
+
+```
+GET /api/grafo/ucs?origen=PAL&destino=CUN
+```
+
+```json
+{"vertices":["PAL","MON","CUN"],"costoTotal":84.0,"nodosExpandidosUcs":11,"nodosExpandidosDijkstra":12}
+```
+
+Mismo resultado que `/dijkstra` (84 por el Monumental, no 90 por la calle directa). Solo queda
+sin expandir LBO, el lugar más lejano de Palermo (99): ahorra 1 de 12.
+
+```
+GET /api/grafo/ucs?origen=LBO&destino=HIT
+```
+
+```json
+{"vertices":["LBO","CON","ABA","HIT"],"costoTotal":84.0,"nodosExpandidosUcs":8,"nodosExpandidosDijkstra":12}
+```
+
+29 + 36 + 19 = 84. Orden de salida de la cola: LBO 0, CON 29, PMA 36, RET 54, OBE 56, ABA 65,
+REC 74, **HIT 84 → fin**. Quedan sin expandir PCE (95), PAL (99), MON y CUN (estos dos ni
+siquiera se descubrieron): 8 de 12. Traza paso a paso en
+[`VERIFICACIONES.md`](VERIFICACIONES.md#8-ucs-dijkstra-con-parada-temprana).
+
+```
+GET /api/grafo/ucs?origen=RET&destino=CUN
+```
+
+```json
+{"vertices":["RET","PAL","MON","CUN"],"costoTotal":129.0,"nodosExpandidosUcs":12,"nodosExpandidosDijkstra":12}
+```
+
+**Peor caso:** CUN es el lugar más lejano de Retiro, así que sale último de la cola y UCS expande
+todo, igual que Dijkstra.
+
+Otros casos verificados (en `UcsTest`): RET → PMA = 18 con **2** expandidos contra 12 (PMA es el
+vecino más cercano de RET); RET → RET = 0 con 1 expandido; y en la semilla de la cátedra A → H = 20
+con **7** contra 8 (G queda en la cola con 24 sin expandirse, como en la diapositiva de la clase 13).
+
+**Por qué corta al SACAR el destino y no al DESCUBRIRLO.** Cuando el destino aparece por primera
+vez (al relajar una arista) su distancia es solo provisoria: puede haber un camino más barato que
+pasa por un lugar que todavía está en la cola. En PAL → CUN, al expandir PAL se descubre CUN con
+**90** (calle directa); recién al expandir MON (66) baja a 66 + 18 = **84**. Cortar al descubrir
+devolvería 90, que está mal. En cambio, cuando el destino **sale** de la cola su distancia ya es
+definitiva: la cola entrega siempre el mínimo, así que todo lo que queda cuesta lo mismo o más, y
+como los costos son no negativos seguir caminando no puede abaratarlo. En el código, el corte está
+justo después del `poll()` y del descarte de entradas viejas:
+
+```java
+nodosExpandidos++;
+if (u == destino) {
+    break; // UCS: al SACAR el destino su dist[] ya es definitiva; lo que queda cuesta >=
+}
+```
+
+**Por qué da el mismo costo que Dijkstra.** Hasta el momento del corte, UCS hace **exactamente** las
+mismas extracciones y relajaciones que Dijkstra (es el mismo bucle). Dijkstra, al extraer el
+destino, también deja dist[destino] definitiva: lo que hace después no la cambia, solo calcula las
+distancias a los demás lugares. UCS se ahorra ese trabajo extra. Por eso el test compara, en cada
+caso, camino y costo de `ucs` contra `dijkstra` y verifica `nodosExpandidosUcs ≤ nodosExpandidosDijkstra`.
+
+**Qué nodos expande.** Exactamente los lugares con g(n) (costo acumulado desde el origen) menor que
+el del destino, más el destino (con empates, depende del orden de la cola): la "mancha que crece
+pareja" en todas direcciones. Cuanto más cerca está el destino, más ahorra.
+
+**Errores** (los mismos que Dijkstra)
+
+```
+GET /api/grafo/ucs?origen=XXX&destino=CUN
+```
+
+```
+400 Bad Request
+{"estado":"ERROR","detalle":"No existe el nodo con id: XXX"}
+```
+
+| Situación | Código | `detalle` |
+|---|---|---|
+| `origen` o `destino` inexistente | 400 | `No existe el nodo con id: XXX` |
+| Alguna calle con costo negativo | 400 | `Dijkstra/UCS no admiten costos negativos: ...` |
+| El destino no es alcanzable desde el origen | 422 | `No hay camino de X a Y` |
+
+Costos negativos e inalcanzable no se pueden provocar con los datos del dominio; los cubren
+`UcsTest.costoNegativoLanzaIllegalArgument` y `UcsTest.destinoInalcanzableLanzaIllegalState`.
+Costos negativos se rechazan por lo mismo que en Dijkstra: la elección greedy "el que sale de la
+cola ya es definitivo" deja de valer, y con ella también el corte de UCS.
+
+**Complejidad temporal: O((V + E) log V) en el peor caso**, la misma que Dijkstra.
+- Si el destino es el último en salir de la cola (RET → CUN) o es inalcanzable (la cola se vacía
+  sin encontrarlo), UCS expande todo: es Dijkstra completo. El análisis es el mismo: a lo sumo
+  E + 1 entradas en la cola, cada `add`/`poll` O(log V).
+- En la práctica expande solo los lugares con g(n) ≤ costo del destino, así que hace menos
+  extracciones y menos relajaciones (en LBO → HIT, 8 extracciones válidas + 1 entrada vieja contra
+  12 + 1). El orden del peor caso no cambia: el ahorro es de constante, no asintótico.
+- La validación de costos (O(V + E)), la reconstrucción del camino (O(V)) y la corrida extra de
+  Dijkstra completo que hace el endpoint **solo para contar** `nodosExpandidosDijkstra`
+  (O((V + E) log V)) no cambian el orden.
+
+**Complejidad espacial: O(V + E)**: `dist[]` y `previo[]` (V), cola de prioridad (hasta E + 1
+entradas) y el camino (≤ V). La corrida de comparación usa otro tanto, mismo orden.
+
+**Estructura usada:** la misma que Dijkstra.
+- **Cola de prioridad (heap binario, `PriorityQueue`)** ordenada por g(n): da el mínimo en
+  O(log V), y es lo que garantiza que el destino sale con su costo definitivo (sin ella no se
+  podría cortar al sacarlo).
+- **Arreglos `dist[]` y `previo[]`**: O(1) por lectura/actualización; `previo[]` permite
+  reconstruir el camino desde el destino hacia atrás (`ArrayDeque`, `addFirst` O(1)).
+- **Lista de adyacencia**: expandir u cuesta O(grado(u)).
+
+**Relación con A\*.** A\* es UCS que además **estima cuánto falta**: la cola se ordena por
+f(n) = g(n) + h(n) en vez de por g(n). En el código cambiaría solo la prioridad con que se encola.
+- Si h es **admisible** (nunca sobreestima lo que falta), A\* sigue devolviendo el óptimo y en general
+  expande menos nodos que UCS, porque orienta la búsqueda hacia el destino en vez de crecer
+  parejo en todas direcciones.
+- Con **h = 0**, A\* es exactamente UCS.
+- Si h sobreestima, A\* puede devolver un camino peor sin avisar (análogo a una cota de Branch &
+  Bound que no es optimista).
+- En el dominio, una h admisible sería la distancia en línea recta entre dos lugares convertida a
+  minutos a pie (nunca se camina menos que la recta). No está implementada.
 
 ---
 
@@ -568,7 +724,7 @@ GET /api/grafo/floyd/comparacion
 Lo verifica `FloydWarshallTest.comparacionConDijkstraEnElDominio`. Que los dos métodos den **los
 mismos 144 valores** lo verifica `coincideConDijkstraEnTodosLosPares`.
 
-**Errores:** si hay alguna calle con costo negativo → 400 `Dijkstra no admite costos negativos: ...`
+**Errores:** si hay alguna calle con costo negativo → 400 `Dijkstra/UCS no admiten costos negativos: ...`
 (la comparación necesita correr Dijkstra, así que valida los costos antes de empezar). Un ciclo
 negativo implica alguna arista negativa, así que también cae en este 400.
 
@@ -1581,7 +1737,7 @@ Los errores se devuelven como JSON desde `config/ManejadorDeErrores`, nunca como
 | Falta un parámetro obligatorio (ej. `/dijkstra?origen=RET`) | 400 | `{"estado":"ERROR","detalle":"Falta el parametro: destino"}` |
 | Parámetro con tipo incorrecto (ej. `/repartir?contenedores=abc`) | 400 | `{"estado":"ERROR","detalle":"Valor invalido para contenedores: abc"}` |
 | Estado inválido (`IllegalStateException`) | 422 | `{"estado":"ERROR","detalle":"..."}` |
-| Algoritmo todavía no implementado | 501 | `{"estado":"PENDIENTE","detalle":"..."}` |
+| Algoritmo todavía no implementado (`PendienteDeImplementar`, mecanismo del scaffold; hoy ningún endpoint lo lanza) | 501 | `{"estado":"PENDIENTE","detalle":"..."}` |
 | Ruta inexistente / método no permitido | 404 / 405 | `{"estado":"ERROR","detalle":"Not Found"}` |
 | Error inesperado (ej. Neo4j caído) | 500 | `{"estado":"ERROR","detalle":"Error interno: <tipo>"}` (el detalle queda en el log) |
 
@@ -1598,14 +1754,3 @@ GET /api/grafo/bfs?origen=XXX
 
 Lo lanza `Grafo.indiceDe` al traducir el id de origen, antes de empezar el recorrido. Lo mismo
 pasa con `/api/grafo/dfs?origen=XXX`.
-
----
-
-## Pendientes
-
-Endpoints cableados cuyo algoritmo no está implementado (responden 501). UCS es **opcional** en la
-consigna y no suma punto: no se implementa.
-
-| Método y ruta | Parámetros | Algoritmo |
-|---|---|---|
-| `GET /api/grafo/ucs` | `origen` (String), `destino` (String) | UCS (opcional) |

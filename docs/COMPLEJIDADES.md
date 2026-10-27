@@ -37,6 +37,7 @@ se hace fuera de las llamadas (partir y combinar).
 | BFS | `/api/grafo/bfs` | No aplica: iterativo. Se cuenta: cada vértice entra a la cola una vez (V) y cada lista de adyacencia se recorre una vez (2E). | O(V + E) | O(V) | Cola FIFO (`ArrayDeque`, O(1) por operación), `boolean[] visitado`, lista de adyacencia |
 | DFS | `/api/grafo/dfs` | No es divide y conquista: una llamada por vértice (V) y cada lista recorrida una vez (2E). | O(V + E) | O(V) (pila de llamadas, profundidad ≤ V) | Pila implícita (recursión), `boolean[] visitado`, lista de adyacencia |
 | Dijkstra | `/api/grafo/dijkstra` | No aplica. A lo sumo E + 1 entradas en la cola, cada `add`/`poll` O(log V). | O((V + E) log V) | O(V + E) | Heap binario (`PriorityQueue`) con eliminación perezosa; arreglos `dist[]`, `previo[]` |
+| UCS (Dijkstra con parada temprana) | `/api/grafo/ucs` | No aplica: mismo bucle que Dijkstra, corta cuando el destino SALE de la cola. Peor caso (destino último en salir o inalcanzable): expande los V lugares, igual que Dijkstra. El endpoint corre además Dijkstra completo solo para contar sus expandidos: mismo orden. | O((V + E) log V) peor caso; en la práctica solo expande los lugares con g(n) ≤ costo del destino (LBO → HIT: 8 de 12) | O(V + E) | Heap binario (`PriorityQueue`) por g(n) con eliminación perezosa; `dist[]`, `previo[]` |
 | Floyd-Warshall | `/api/grafo/floyd` | Recurrencia de PD (no de tiempo): d_k[i][j] = min(d_(k−1)[i][j], d_(k−1)[i][k] + d_(k−1)[k][j]). V capas × V² celdas, O(1) cada una. | O(V³) | O(V²) | Matriz de adyacencia `double[][]` (acceso O(1)) |
 | Floyd con camino | `/api/grafo/floyd/camino` | Igual que Floyd; al relajar, siguiente[i][j] = siguiente[i][k]. Reconstrucción: a lo sumo V saltos. | O(V³) + O(V) = O(V³) | O(V²) | Matriz de distancias + matriz `int[][] siguiente` |
 | Floyd vs. Dijkstra V veces | `/api/grafo/floyd/comparacion` | No aplica: corre los dos. | O(V³ + V (V + E) log V) | O(V² + E) | Las de Floyd y Dijkstra, más contadores |
@@ -60,6 +61,9 @@ se hace fuera de las llamadas (partir y combinar).
   O(E (V + E)); BFS/DFS con matriz de adyacencia serían O(V²).
 - **Pseudopolinómica:** O(n · W) es polinómica en el **valor** de W, pero W ocupa log W bits en la
   entrada; en función del tamaño de la entrada crece exponencialmente.
+- **UCS vs. Dijkstra:** misma complejidad en el peor caso; UCS ahorra trabajo en la práctica
+  (constante, no asintótico) porque corta al sacar el destino de la cola. Cortar al descubrirlo
+  sería incorrecto (PAL → CUN daría 90 en lugar de 84).
 - **Floyd vs. Dijkstra V veces:** O(V³) contra O(V (V + E) log V). En grafos dispersos (E ≈ V,
   como un mapa de calles) gana Dijkstra, O(V² log V); en densos (E ≈ V²) gana Floyd. Floyd además
   acepta aristas negativas y detecta ciclos negativos.

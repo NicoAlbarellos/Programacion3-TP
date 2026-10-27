@@ -18,6 +18,7 @@ alcanzado. En **negrita**, los vértices ya extraídos (su valor es definitivo).
 5. [Floyd-Warshall](#5-floyd-warshall)
 6. [Backtracking: rutas simples](#6-backtracking-rutas-simples)
 7. [Branch & Bound: reparto en k contenedores](#7-branch--bound-reparto-en-k-contenedores)
+8. [UCS: Dijkstra con parada temprana](#8-ucs-dijkstra-con-parada-temprana)
 
 ---
 
@@ -681,3 +682,61 @@ es); se podan porque no pueden ser **mejores** (poda por optimalidad, no por via
 En el nodo 61 `mejor` = 11 = cota inicial. Desde ahí todo hijo tiene cota ≥ 11 = `mejor` y se poda
 (6 podas más, 87 en total) sin explorar ningún nodo nuevo: el algoritmo termina con la **prueba** de
 que 11 es óptimo sin recorrer el resto del árbol.
+
+---
+
+## 8. UCS: Dijkstra con parada temprana
+
+Endpoint [`/api/grafo/ucs`](ENDPOINTS.md#get-apigrafoucs), test `UcsTest`. Mismo bucle que
+Dijkstra (sección 1), pero **termina cuando el destino sale de la cola**. **Nodo expandido** =
+extracción válida de la cola (las entradas viejas descartadas no cuentan; el destino sí).
+
+### 8.1 Traza a mano: LBO → HIT
+
+Inicialización: dist[LBO] = 0, el resto ∞; cola = {(LBO, 0)}. Los vecinos se miran en el orden de
+la lista de adyacencia (tabla en [ENDPOINTS.md](ENDPOINTS.md#carga-del-grafo-común-a-todos-los-endpoints-de-apigrafo)).
+
+| Expandido | Se extrae (g) | Relajaciones exitosas | Relajaciones que no mejoran |
+|---|---|---|---|
+| 1 | LBO (0) | CON 0+29=29, PMA 0+36=36 | — |
+| 2 | CON (29) | ABA 29+36=65, OBE 29+31=60 | PMA 29+30=59 ≥ 36 |
+| 3 | PMA (36) | **OBE 36+20=56 < 60** (se reencola), RET 36+18=54 | — |
+| 4 | RET (54) | PAL 54+45=99, REC 54+20=74 | OBE 54+22=76 ≥ 56 |
+| 5 | OBE (56) | — | ABA 56+28=84 ≥ 65; REC 56+25=81 ≥ 74 |
+| — | (OBE, 60) | entrada vieja: 60 > dist[OBE] = 56, **se descarta** (no cuenta) | |
+| 6 | ABA (65) | HIT 65+19=84, PCE 65+30=95 | REC 65+29=94 ≥ 74 |
+| 7 | REC (74) | — | PAL 74+30=104 ≥ 99 |
+| 8 | **HIT (84)** | **es el destino: fin** (no se miran sus vecinos) | |
+
+(Se omiten los vecinos ya procesados, que nunca mejoran con costos ≥ 0.)
+
+Al cortar quedan en la cola PCE (95) y PAL (99) sin expandir; MON y CUN ni siquiera se
+descubrieron (dist = ∞). Camino por `previo[]`: HIT ← ABA ← CON ← LBO, es decir
+**LBO → CON → ABA → HIT = 29 + 36 + 19 = 84**. Cola: 11 inserciones y 9 extracciones
+(8 válidas + 1 descartada); Dijkstra completo habría seguido con PCE, PAL, MON y CUN.
+
+Notar que HIT se **descubre** en el paso 6 con 84 y recién se **saca** en el paso 8: en este caso
+el valor no cambió en el medio, pero en PAL → CUN sí (se descubre con 90 por la calle directa y
+sale con 84 por MON, ver sección 1). Por eso UCS corta al sacar y no al descubrir.
+
+Salida real, coincide con la traza:
+
+```
+GET /api/grafo/ucs?origen=LBO&destino=HIT
+{"vertices":["LBO","CON","ABA","HIT"],"costoTotal":84.0,"nodosExpandidosUcs":8,"nodosExpandidosDijkstra":12}
+```
+
+### 8.2 Nodos expandidos: UCS vs. Dijkstra
+
+| Consulta | Camino | Costo (min) | UCS | Dijkstra | Por qué |
+|---|---|---|---|---|---|
+| LBO → HIT | LBO, CON, ABA, HIT | 84 | **8** | 12 | Traza 8.1. |
+| PAL → CUN | PAL, MON, CUN | 84 | **11** | 12 | Solo queda afuera LBO (99), el más lejano de PAL (sección 1, paso 12). |
+| RET → PMA | RET, PMA | 18 | **2** | 12 | PMA es el vecino más cercano de RET. |
+| RET → CUN | RET, PAL, MON, CUN | 129 | 12 | 12 | **Peor caso:** CUN es el más lejano de RET, sale último. |
+| RET → RET | RET | 0 | 1 | 12 | El origen es el destino: corta en la primera extracción. |
+| Semilla cátedra A → H | A, B, C, D, F, H | 20 | **7** | 8 | Salen A 0, B 4, C 7, D 9, E 14, F 17, H 20; G queda en la cola con 24 (diapositiva de la clase 13). |
+
+Las cuatro primeras son salidas reales del endpoint; todas están en `UcsTest`, que además verifica
+en cada caso que camino y costo sean iguales a los de `dijkstra` y que
+`nodosExpandidosUcs ≤ nodosExpandidosDijkstra`.
