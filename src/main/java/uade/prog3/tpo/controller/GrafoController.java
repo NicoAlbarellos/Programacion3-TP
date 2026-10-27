@@ -14,12 +14,10 @@ import java.util.Map;
 /**
  * Endpoints de los algoritmos sobre grafos.
  *
- * El cableado ya esta hecho: cada endpoint carga el grafo y delega en la
- * clase de algoritmo correspondiente. Mientras el algoritmo no este
- * implementado, la respuesta es 501 con un mensaje claro.
+ * Cada endpoint carga el grafo (no dirigido, ver DIRIGIDO) y delega en la
+ * clase de algoritmo correspondiente. UCS es opcional y responde 501.
  *
- * Lo unico que hay que tocar para que un endpoint funcione es el metodo
- * del paquete algorithm. Los controllers NO deben contener logica algoritmica.
+ * Los controllers NO contienen logica algoritmica: toda va en el paquete algorithm.
  */
 @RestController
 @RequestMapping("/api/grafo")
@@ -123,10 +121,10 @@ public class GrafoController {
 
     /** GET /api/grafo/rutas?origen=RET&destino=CUN&costoMaximo=150&saltosMaximos=4 */
     @GetMapping("/rutas")
-    public List<Backtracking.Ruta> rutas(@RequestParam String origen,
-                                         @RequestParam String destino,
-                                         @RequestParam(defaultValue = "1000") double costoMaximo,
-                                         @RequestParam(defaultValue = "10") int saltosMaximos) {
+    public Backtracking.ResultadoRutas rutas(@RequestParam String origen,
+                                             @RequestParam String destino,
+                                             @RequestParam(defaultValue = "1000") double costoMaximo,
+                                             @RequestParam(defaultValue = "10") int saltosMaximos) {
         return backtracking.rutasSimples(grafoService.cargar(DIRIGIDO), origen, destino,
                 costoMaximo, saltosMaximos);
     }
