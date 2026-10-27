@@ -52,3 +52,16 @@ GET http://localhost:8080/api/seleccion/repartir?contenedores=3
 GET http://localhost:8080/api/seleccion/repartir?contenedores=2
 ### (esperado: 400 "La cantidad de contenedores debe ser al menos 1: 0")
 GET http://localhost:8080/api/seleccion/repartir?contenedores=0
+
+### Errores controlados    (todos responden JSON {"estado":"ERROR","detalle":...}, nunca un stack trace)
+### (esperado: 400 "Falta el parametro: destino")
+GET http://localhost:8080/api/grafo/dijkstra?origen=RET
+### (esperado: 400 "Valor invalido para capacidad: abc")
+GET http://localhost:8080/api/seleccion/dinamica?capacidad=abc
+### (esperado: 400 "La capacidad no puede ser negativa: -3.0")
+GET http://localhost:8080/api/seleccion/greedy?capacidad=-3
+### (esperado: 400 "Criterio invalido: precio. Use valor, peso o ratio.")
+GET http://localhost:8080/api/seleccion/quicksort?criterio=precio
+### (esperado: 400 "Orden invalido: arriba. Use asc o desc")
+GET http://localhost:8080/api/seleccion/mergesort?orden=arriba
+
