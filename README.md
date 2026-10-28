@@ -1,4 +1,4 @@
-# TPO Programación III — Apocalipsis zombie en CABA
+# TPO Programación III - Apocalipsis zombie en CABA
 
 Trabajo Práctico Obligatorio de Programación III (UADE, 2º cuatrimestre 2026).
 Dominio: **sobrevivir a un apocalipsis zombie moviéndose a pie entre refugios y puntos reales de la
