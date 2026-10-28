@@ -4,7 +4,7 @@ Una ficha por endpoint: qué responde en el dominio (apocalipsis zombie en CABA)
 ejemplo **real** de request y respuesta, complejidad justificada y estructura de datos usada.
 
 Notación: **V** = cantidad de lugares (vértices), **E** = cantidad de calles (aristas). En nuestro
-grafo V = 12 y E = 21. El costo de una arista son **minutos a pie**.
+grafo V = 31 y E = 51. El costo de una arista son **minutos a pie**.
 
 Los ejemplos se obtuvieron corriendo la aplicación contra Neo4j con la carga inicial
 (`seed/CargaInicial.java`), salvo donde la ficha indica otra cosa. Los cálculos a mano que
@@ -49,20 +49,32 @@ del algoritmo** (vértices y aristas), nunca dentro de su bucle.
 - **Orden determinista:** las consultas Cypher piden los vértices `ORDER BY n.id` y las aristas
   `ORDER BY a.id, b.id` (con el sentido en que se guardaron). El orden de cada lista de adyacencia
   es el orden en que se agregaron las aristas, así que es siempre el mismo. Con la carga actual
-  quedan así:
+  quedan así (entre paréntesis, el costo en minutos):
 
   | Lugar | Vecinos (en orden) | Lugar | Vecinos (en orden) |
   |---|---|---|---|
-  | ABA | HIT PCE REC CON OBE | OBE | ABA CON PMA REC RET |
-  | CON | ABA LBO OBE PMA | PAL | HIT CUN MON REC RET |
-  | CUN | MON PAL | PCE | ABA HIT |
-  | HIT | ABA PAL PCE | PMA | OBE CON LBO RET |
-  | LBO | CON PMA | REC | ABA OBE PAL RET |
-  | MON | CUN PAL | RET | OBE PAL PMA REC |
+  | ABA | BOE(36) CGR(27) HIT(15) REC(36) | LBO | CON(32) HGA(51) SAN(34) |
+  | AEP | BEL(59) CUN(44) PLA(21) | MAT | FLO(73) VEL(45) |
+  | AGR | CHA(45) DEV(43) VUR(31) | MON | BEL(24) CUN(20) SAA(43) |
+  | BEL | AEP(59) COL(27) MON(24) SAA(44) | OBE | CGR(18) CON(40) PMA(28) REC(31) RET(23) |
+  | BOE | ABA(36) CAB(27) HGA(36) PCH(35) | PAL | CHA(43) HIT(43) PLA(23) REC(40) |
+  | CAB | BOE(27) FLO(43) PCE(20) PCH(29) | PCE | CAB(20) CHA(37) HIT(20) |
+  | CGR | ABA(27) CON(33) OBE(18) | PCH | BOE(35) CAB(29) FLO(36) |
+  | CHA | AGR(45) COL(19) PAL(43) PCE(37) | PLA | AEP(21) COL(50) PAL(23) |
+  | COL | BEL(27) CHA(19) PLA(50) VUR(56) | PMA | OBE(28) RES(15) RET(36) SAN(20) |
+  | CON | CGR(33) HGA(15) LBO(32) OBE(40) SAN(18) | REC | ABA(36) OBE(31) PAL(40) RET(26) |
+  | CUN | AEP(44) MON(20) | RES | PMA(15) |
+  | DEV | AGR(43) VEL(58) | RET | OBE(23) PMA(36) REC(26) |
+  | FLO | CAB(43) MAT(73) PCH(36) VEL(79) | SAA | BEL(44) MON(43) VUR(35) |
+  | HGA | BOE(36) CON(15) LBO(51) | SAN | CON(18) LBO(34) PMA(20) |
+  | HIT | ABA(15) PAL(43) PCE(20) | VEL | DEV(58) FLO(79) MAT(45) |
+  | | | VUR | AGR(31) COL(56) SAA(35) |
 
-  Ojo: no es orden alfabético de vecinos. Por ejemplo, en ABA aparecen primero HIT, PCE y REC
-  (aristas guardadas como ABA → …) y después CON y OBE (guardadas como CON → ABA y OBE → ABA, que
-  vienen más tarde en el `ORDER BY`).
+  Las listas quedan en orden alfabético de vecinos, pero no porque se ordenen: cada calle está
+  guardada con el id **menor como origen** (ej. ABA → HIT, CON → HGA), así que en la lista de u
+  primero entran las calles x → u con x < u (que vienen antes en el `ORDER BY`) y después las
+  u → y con y > u. Si se guardara una calle al revés (ej. LUG → FLO), ese vecino quedaría en otra
+  posición y los recorridos podrían cambiar.
 - **Costo de la carga:** O(V + E) en tiempo y espacio (un recorrido por cada fila de las consultas,
   inserción O(1) amortizada en `ArrayList`). Es del mismo orden que BFS y DFS, así que no cambia la
   complejidad de esos endpoints.
@@ -84,10 +96,10 @@ GET /api/grafo/resumen
 ```
 
 ```json
-{"vertices":12,"aristas":21,"dirigido":false,"ids":["ABA","CON","CUN","HIT","LBO","MON","OBE","PAL","PCE","PMA","REC","RET"]}
+{"vertices":31,"aristas":51,"dirigido":false,"ids":["ABA","AEP","AGR","BEL","BOE","CAB","CGR","CHA","COL","CON","CUN","DEV","FLO","HGA","HIT","LBO","MAT","MON","OBE","PAL","PCE","PCH","PLA","PMA","REC","RES","RET","SAA","SAN","VEL","VUR"]}
 ```
 
-12 lugares y 21 calles; los ids salen ordenados porque la carga hace `ORDER BY n.id`.
+31 lugares y 51 calles; los ids salen ordenados porque la carga hace `ORDER BY n.id`.
 
 **Complejidad:** O(V + E) en tiempo y espacio, dominada por la carga del grafo. `cantidadAristas()`
 suma los tamaños de las V listas (O(V)) y divide por 2 en el no dirigido, porque cada calle aparece
@@ -119,7 +131,7 @@ GET /api/grafo/bfs?origen=RET
 ```
 
 ```json
-["RET","OBE","PAL","PMA","REC","ABA","CON","HIT","CUN","MON","LBO","PCE"]
+["RET","OBE","PMA","REC","CGR","CON","RES","SAN","ABA","PAL","HGA","LBO","BOE","HIT","CHA","PLA","CAB","PCH","PCE","AGR","COL","AEP","FLO","DEV","VUR","BEL","CUN","MAT","VEL","SAA","MON"]
 ```
 
 Lectura por niveles:
@@ -127,17 +139,32 @@ Lectura por niveles:
 | Nivel (tramos desde RET) | Lugares | Descubiertos desde |
 |---|---|---|
 | 0 | RET | — |
-| 1 | OBE, PAL, PMA, REC | RET |
-| 2 | ABA, CON | OBE |
-| 2 | HIT, CUN, MON | PAL |
-| 2 | LBO | PMA |
-| 3 | PCE | ABA |
+| 1 | OBE, PMA, REC | RET |
+| 2 | CGR, CON | OBE |
+| 2 | RES, SAN | PMA |
+| 2 | ABA, PAL | REC |
+| 3 | HGA, LBO | CON |
+| 3 | BOE, HIT | ABA |
+| 3 | CHA, PLA | PAL |
+| 4 | CAB, PCH | BOE |
+| 4 | PCE | HIT |
+| 4 | AGR, COL | CHA |
+| 4 | AEP | PLA |
+| 5 | FLO | CAB |
+| 5 | DEV, VUR | AGR |
+| 5 | BEL | COL |
+| 5 | CUN | AEP |
+| 6 | MAT, VEL | FLO |
+| 6 | SAA | VUR |
+| 6 | MON | BEL |
 
-REC no agrega a nadie: todos sus vecinos (ABA, OBE, PAL, RET) ya estaban marcados.
+Varios lugares no agregan a nadie porque todos sus vecinos ya estaban marcados (ej. CGR: ABA, CON y
+OBE ya estaban; RES: solo tiene a PMA).
 
-BFS da el camino mínimo en **cantidad de tramos**, no en minutos: CUN aparece en el nivel 2
-(RET → PAL → CUN), aunque esa calle de 90 minutos no sea la ruta más rápida. Para minutos hace falta
-Dijkstra.
+BFS da el camino mínimo en **cantidad de tramos**, no en minutos: LBO aparece en el nivel 3
+descubierto desde CON (RET – OBE – CON – LBO = 23 + 40 + 32 = 95 min), pero la ruta más rápida es
+RET – PMA – SAN – LBO = 36 + 20 + 34 = **90**, también de 3 tramos. BFS se queda con el primero que
+descubre, sin mirar los costos. Para minutos hace falta Dijkstra.
 
 **Complejidad temporal: O(V + E).**
 - Cada vértice se marca como visitado **al encolarlo**, así que entra a la cola una sola vez:
@@ -182,17 +209,19 @@ GET /api/grafo/dfs?origen=RET
 ```
 
 ```json
-["RET","OBE","ABA","HIT","PAL","CUN","MON","REC","PCE","CON","LBO","PMA"]
+["RET","OBE","CGR","ABA","BOE","CAB","FLO","MAT","VEL","DEV","AGR","CHA","COL","BEL","AEP","CUN","MON","SAA","VUR","PLA","PAL","HIT","PCE","REC","PCH","HGA","CON","LBO","SAN","PMA","RES"]
 ```
 
-Traza (siguiendo la tabla de vecinos de arriba):
+Traza (siguiendo la tabla de vecinos de arriba; siempre se baja al primer vecino no visitado):
 
-1. RET → OBE (primer vecino de RET) → ABA (primer vecino de OBE) → HIT (primer vecino de ABA)
-   → PAL (ABA ya visitado) → CUN (HIT ya visitado) → MON.
-2. MON no tiene vecinos nuevos; retrocede a CUN (nada nuevo) y a PAL → REC.
-3. REC no tiene vecinos nuevos; retrocede a PAL (MON y RET ya visitados) y a HIT → PCE.
-4. Retrocede a ABA (PCE y REC ya visitados) → CON → LBO → PMA.
-5. Todo visitado: la recursión vuelve hasta RET y termina.
+1. RET → OBE → CGR → ABA → BOE → CAB → FLO → MAT → VEL → DEV → AGR → CHA → COL → BEL → AEP → CUN
+   → MON → SAA → VUR: 19 lugares en una sola bajada.
+2. VUR, SAA, MON y CUN no tienen vecinos nuevos; retrocede hasta AEP → PLA → PAL → HIT → PCE.
+3. PCE no tiene vecinos nuevos; retrocede a HIT y a PAL → REC.
+4. REC no tiene vecinos nuevos; retrocede por PAL, PLA, AEP, BEL, COL, CHA, AGR, DEV, VEL y MAT
+   (todos sin vecinos nuevos) hasta FLO → PCH.
+5. PCH no tiene vecinos nuevos; retrocede a FLO, CAB y BOE → HGA → CON → LBO → SAN → PMA → RES.
+6. Todo visitado: la recursión vuelve hasta RET y termina.
 
 **Complejidad temporal: O(V + E).**
 - Cada vértice se marca como visitado al entrar a `dfsRecursivo` y solo se llama sobre vértices no
@@ -204,7 +233,7 @@ Traza (siguiendo la tabla de vecinos de arriba):
 
 **Complejidad espacial: O(V)** adicional al grafo: arreglo `visitado` (V), lista de resultado (V) y
 la **pila de llamadas**, que en el peor caso (un camino que pasa por todos los vértices) tiene
-profundidad V. En el ejemplo la profundidad máxima es 7 (RET-OBE-ABA-HIT-PAL-CUN-MON).
+profundidad V. En el ejemplo la profundidad máxima es 19 (la bajada del paso 1, de RET a VUR).
 
 **Estructura usada:**
 - **Pila implícita** (la pila de llamadas de la recursión): el último vértice descubierto es el
@@ -242,9 +271,9 @@ Implementación: `CaminosMinimos.dijkstra` (`algorithm/CaminosMinimos.java`).
 
 | Nombre | Tipo | Obligatorio | Significado |
 |---|---|---|---|
-| `origen` | String | sí | Id del lugar de partida (ej. `PAL`). |
-| `destino` | String | sí | Id del lugar de llegada (ej. `CUN`). |
-| `infectados` | lista de String (ids separados por coma) | no | Lugares tomados por zombies: la ruta no puede pasar por ellos, ni siquiera como paso intermedio (ej. `infectados=CON,ABA`). Sin el parámetro, Dijkstra normal. |
+| `origen` | String | sí | Id del lugar de partida (ej. `HGA`). |
+| `destino` | String | sí | Id del lugar de llegada (ej. `LBO`). |
+| `infectados` | lista de String (ids separados por coma) | no | Lugares tomados por zombies: la ruta no puede pasar por ellos, ni siquiera como paso intermedio (ej. `infectados=CON,BOE`). Sin el parámetro, Dijkstra normal. |
 
 **Respuesta:** `vertices` = lugares del camino en orden (incluye origen y destino);
 `costoTotal` = minutos a pie del camino.
@@ -252,63 +281,68 @@ Implementación: `CaminosMinimos.dijkstra` (`algorithm/CaminosMinimos.java`).
 **Ejemplos**
 
 ```
-GET /api/grafo/dijkstra?origen=PAL&destino=CUN
+GET /api/grafo/dijkstra?origen=HGA&destino=LBO
 ```
 
 ```json
-{"vertices":["PAL","MON","CUN"],"costoTotal":84.0}
+{"vertices":["HGA","CON","LBO"],"costoTotal":47.0}
 ```
 
-Existe la calle directa PAL – CUN de 90 minutos, pero PAL → MON → CUN cuesta 66 + 18 = **84**. Al
-principio dist[CUN] = 90 (por la calle directa); cuando se extrae MON (dist 66) la **relajación** de
-MON – CUN encuentra 66 + 18 = 84 < 90 y actualiza dist[CUN] y previo[CUN] = MON. Si el endpoint
-devolviera 90, la relajación estaría mal. La traza completa, paso a paso, está en
-[`VERIFICACIONES.md`](VERIFICACIONES.md#1-dijkstra-desde-pal).
+Existe la calle directa HGA – LBO de 51 minutos, pero HGA → CON → LBO cuesta 15 + 32 = **47**. Al
+expandir HGA, dist[LBO] = 51 (por la calle directa); cuando se extrae CON (dist 15) la
+**relajación** de CON – LBO encuentra 15 + 32 = 47 < 51 y actualiza dist[LBO] y previo[LBO] = CON.
+Si el endpoint devolviera 51, la relajación estaría mal. La traza completa, paso a paso, está en
+[`VERIFICACIONES.md`](VERIFICACIONES.md), §1.
 
 ```
 GET /api/grafo/dijkstra?origen=RET&destino=CUN
 ```
 
 ```json
-{"vertices":["RET","PAL","MON","CUN"],"costoTotal":129.0}
+{"vertices":["RET","REC","PAL","PLA","AEP","CUN"],"costoTotal":154.0}
 ```
 
-45 + 66 + 18 = 129. Por la calle directa PAL – CUN serían 45 + 90 = 135.
+26 + 40 + 23 + 21 + 44 = 154. La alternativa por el norte, RET – REC – PAL – CHA – COL – BEL – MON –
+CUN, cuesta 199.
 
 **Con lugares infectados** (ver [Lugares infectados](#lugares-infectados-en-dijkstra) más abajo):
 
 ```
-GET /api/grafo/dijkstra?origen=PAL&destino=CUN&infectados=MON
+GET /api/grafo/dijkstra?origen=HGA&destino=LBO&infectados=CON
 ```
 
 ```json
-{"vertices":["PAL","CUN"],"costoTotal":90.0}
+{"vertices":["HGA","LBO"],"costoTotal":51.0}
 ```
 
-Con el Monumental infectado ya no se puede usar PAL → MON → CUN (84): queda la calle directa
-PAL – CUN, **90**.
+Con Constitución infectada ya no se puede usar HGA → CON → LBO (47): queda la calle directa
+HGA – LBO, **51**.
 
 ```
 GET /api/grafo/dijkstra?origen=LBO&destino=HIT&infectados=CON
 ```
 
 ```json
-{"vertices":["LBO","PMA","OBE","ABA","HIT"],"costoTotal":103.0}
+{"vertices":["LBO","HGA","BOE","ABA","HIT"],"costoTotal":138.0}
 ```
 
-Sin infectados es LBO → CON → ABA → HIT = 84. Sin Constitución hay que rodear por Puerto Madero y
-el Obelisco: 36 + 20 + 28 + 19 = **103**.
+Sin infectados es LBO → CON → CGR → ABA → HIT = 32 + 33 + 27 + 15 = 107. Sin Constitución hay que
+salir por la calle lenta a Garrahan y rodear por Boedo: 51 + 36 + 36 + 15 = **138**.
 
 ```
-GET /api/grafo/dijkstra?origen=LBO&destino=HIT&infectados=CON,ABA
+GET /api/grafo/dijkstra?origen=LBO&destino=HIT&infectados=CON,BOE
 ```
 
 ```json
-{"vertices":["LBO","PMA","RET","PAL","HIT"],"costoTotal":120.0}
+{"vertices":["LBO","SAN","PMA","OBE","CGR","ABA","HIT"],"costoTotal":142.0}
 ```
 
-Sin Constitución ni Abasto: 36 + 18 + 45 + 21 = **120** (la siguiente, LBO – PMA – RET – REC – PAL – HIT,
-cuesta 36 + 18 + 20 + 30 + 21 = 125).
+Sin Constitución ni Boedo, el Garrahan queda en un callejón (sus vecinos son BOE, CON y LBO): hay
+que ir por San Telmo y Puerto Madero, 34 + 20 + 28 + 18 + 27 + 15 = **142**.
+
+Otros casos (verificados en `LugaresInfectadosTest`): OBE → HIT con `infectados=CGR` pasa de 60 a
+**82** (OBE – REC – ABA – HIT); RET → CUN con `infectados=PLA` pasa de 154 a **199** (rodea por
+CHA – COL – BEL – MON).
 
 **Origen = destino** (ej. `?origen=RET&destino=RET`): 200 con `{"vertices":["RET"],"costoTotal":0.0}`.
 No es un caso especial: `dist[origen] = 0` y la reconstrucción termina enseguida.
@@ -316,7 +350,7 @@ No es un caso especial: `dist[origen] = 0` y la reconstrucción termina enseguid
 **Errores**
 
 ```
-GET /api/grafo/dijkstra?origen=PAL&destino=XXX
+GET /api/grafo/dijkstra?origen=HGA&destino=XXX
 ```
 
 ```
@@ -337,16 +371,16 @@ cubierto por `CaminosMinimosTest.destinoInalcanzableFalla`, que agrega un lugar 
 verifica el mensaje `No hay camino de RET a ZZZ`. **Con infectados sí se da**:
 
 ```
-GET /api/grafo/dijkstra?origen=RET&destino=CUN&infectados=PAL
+GET /api/grafo/dijkstra?origen=OBE&destino=RES&infectados=PMA
 ```
 
 ```
 422 Unprocessable Entity
-{"estado":"ERROR","detalle":"No hay camino de RET a CUN"}
+{"estado":"ERROR","detalle":"No hay camino de OBE a RES"}
 ```
 
-Ciudad Universitaria solo tiene calles a MON y a PAL, y el Monumental solo a PAL y a CUN: con
-Plaza Italia infectada, {MON, CUN} queda separado del resto del grafo.
+La Reserva Ecológica solo tiene una calle, a Puerto Madero: con PMA infectado, RES queda separada
+del resto del grafo.
 
 ```
 GET /api/grafo/dijkstra?origen=PAL&destino=CUN&infectados=MON,PAL
@@ -407,7 +441,7 @@ no entran). Espacio extra: el arreglo `bloqueado[]`, O(V); el total sigue en O(V
   `decreaseKey` (el `Q.decreaseKey` del pseudocódigo de la clase). Cuando una relajación mejora
   dist[v], se **inserta otra entrada** (v, nueva distancia) en la cola. Al extraer una entrada cuya
   distancia es mayor que dist[u] actual, es una entrada vieja y se descarta en O(1) (en el ejemplo
-  PAL → CUN se descarta la entrada (CUN, 90) después de procesar CUN con 84).
+  HGA → LBO se descarta la entrada (LBO, 51) después de procesar LBO con 47).
 - **Tamaño de la cola.** Cada lugar se procesa una sola vez (las extracciones repetidas se
   descartan), así que cada lista de adyacencia se recorre una vez: 2E aristas miradas en total.
   Una entrada nueva solo se crea con una relajación exitosa, y una calle u – v solo puede relajar
@@ -417,8 +451,8 @@ no entran). Espacio extra: el arreglo `bloqueado[]`, O(V); el total sigue en O(V
   E ≤ V², log E ≤ 2 log V: O(log V).
 - **Total.** V extracciones válidas + O(E) inserciones y extracciones, cada una O(log V):
   O((V + E) log V). Validar costos es O(V + E) y reconstruir el camino O(V), no cambian el orden.
-  En el ejemplo PAL → CUN hubo 13 inserciones y 13 extracciones (12 lugares procesados + 1 entrada
-  vieja descartada).
+  En el ejemplo HGA → LBO hubo 34 inserciones y 34 extracciones (31 lugares procesados + 3 entradas
+  viejas descartadas: (LBO, 51), (RET, 89) y (CUN, 214)).
 
 **Complejidad espacial: O(V + E)**: arreglos `dist[]` y `previo[]` (V), cola de prioridad (hasta
 E + 1 entradas) y el camino reconstruido (≤ V).
@@ -452,8 +486,8 @@ Dijkstra: los dos usan el mismo núcleo `arbolDesde(grafo, origen, destino)`; Di
 
 | Nombre | Tipo | Obligatorio | Significado |
 |---|---|---|---|
-| `origen` | String | sí | Id del lugar de partida (ej. `PAL`). |
-| `destino` | String | sí | Id del lugar de llegada (ej. `CUN`). |
+| `origen` | String | sí | Id del lugar de partida (ej. `OBE`). |
+| `destino` | String | sí | Id del lugar de llegada (ej. `HIT`). |
 
 **Respuesta**
 
@@ -462,7 +496,7 @@ Dijkstra: los dos usan el mismo núcleo `arbolDesde(grafo, origen, destino)`; Di
 | `vertices` | Lugares del camino en orden (incluye origen y destino). Igual al de `/dijkstra`. |
 | `costoTotal` | Minutos a pie del camino. Igual al de `/dijkstra`. |
 | `nodosExpandidosUcs` | Lugares que UCS sacó de la cola y procesó, contando el destino (con el que corta). |
-| `nodosExpandidosDijkstra` | Lugares que expande Dijkstra completo desde el mismo origen (en un grafo conexo, siempre V = 12). |
+| `nodosExpandidosDijkstra` | Lugares que expande Dijkstra completo desde el mismo origen (en un grafo conexo, siempre V = 31). |
 
 **Nodo expandido** = extracción **válida** de la cola: el lugar sale con su distancia vigente y se
 miran sus vecinos. Las entradas viejas que se descartan (eliminación perezosa) no cuentan. El
@@ -471,49 +505,60 @@ destino cuenta como expandido aunque no se miren sus vecinos.
 **Ejemplos**
 
 ```
-GET /api/grafo/ucs?origen=PAL&destino=CUN
+GET /api/grafo/ucs?origen=RET&destino=PMA
 ```
 
 ```json
-{"vertices":["PAL","MON","CUN"],"costoTotal":84.0,"nodosExpandidosUcs":11,"nodosExpandidosDijkstra":12}
+{"vertices":["RET","PMA"],"costoTotal":36.0,"nodosExpandidosUcs":4,"nodosExpandidosDijkstra":31}
 ```
 
-Mismo resultado que `/dijkstra` (84 por el Monumental, no 90 por la calle directa). Solo queda
-sin expandir LBO, el lugar más lejano de Palermo (99): ahorra 1 de 12.
+Calle directa de 36 minutos. Orden de salida de la cola: RET 0, OBE 23, REC 26, **PMA 36 → fin**:
+4 expandidos contra 31.
 
 ```
-GET /api/grafo/ucs?origen=LBO&destino=HIT
-```
-
-```json
-{"vertices":["LBO","CON","ABA","HIT"],"costoTotal":84.0,"nodosExpandidosUcs":8,"nodosExpandidosDijkstra":12}
-```
-
-29 + 36 + 19 = 84. Orden de salida de la cola: LBO 0, CON 29, PMA 36, RET 54, OBE 56, ABA 65,
-REC 74, **HIT 84 → fin**. Quedan sin expandir PCE (95), PAL (99), MON y CUN (estos dos ni
-siquiera se descubrieron): 8 de 12. Traza paso a paso en
-[`VERIFICACIONES.md`](VERIFICACIONES.md#8-ucs-dijkstra-con-parada-temprana).
-
-```
-GET /api/grafo/ucs?origen=RET&destino=CUN
+GET /api/grafo/ucs?origen=HGA&destino=LBO
 ```
 
 ```json
-{"vertices":["RET","PAL","MON","CUN"],"costoTotal":129.0,"nodosExpandidosUcs":12,"nodosExpandidosDijkstra":12}
+{"vertices":["HGA","CON","LBO"],"costoTotal":47.0,"nodosExpandidosUcs":5,"nodosExpandidosDijkstra":31}
 ```
 
-**Peor caso:** CUN es el lugar más lejano de Retiro, así que sale último de la cola y UCS expande
-todo, igual que Dijkstra.
+Mismo resultado que `/dijkstra` (47 por Constitución, no 51 por la calle directa). Orden de salida:
+HGA 0, CON 15, SAN 33, BOE 36, **LBO 47 → fin**. LBO entró a la cola con 51 al expandir HGA y bajó a
+47 al expandir CON, **antes** de salir.
 
-Otros casos verificados (en `UcsTest`): RET → PMA = 18 con **2** expandidos contra 12 (PMA es el
-vecino más cercano de RET); RET → RET = 0 con 1 expandido; y en la semilla de la cátedra A → H = 20
-con **7** contra 8 (G queda en la cola con 24 sin expandirse, como en la diapositiva de la clase 13).
+```
+GET /api/grafo/ucs?origen=OBE&destino=HIT
+```
+
+```json
+{"vertices":["OBE","CGR","ABA","HIT"],"costoTotal":60.0,"nodosExpandidosUcs":11,"nodosExpandidosDijkstra":31}
+```
+
+18 + 27 + 15 = 60. Salen los 10 lugares a menos de 60 minutos del Obelisco (OBE 0, CGR 18, RET 23,
+PMA 28, REC 31, CON 40, RES 43, ABA 45, SAN 48, HGA 55) y después **HIT 60 → fin**: 11 de 31. Traza
+paso a paso en [`VERIFICACIONES.md`](VERIFICACIONES.md), §8.
+
+```
+GET /api/grafo/ucs?origen=MAT&destino=CUN
+```
+
+```json
+{"vertices":["MAT","FLO","CAB","PCE","CHA","COL","BEL","MON","CUN"],"costoTotal":263.0,"nodosExpandidosUcs":31,"nodosExpandidosDijkstra":31}
+```
+
+**Peor caso:** CUN es el lugar más lejano de Mataderos (263 minutos, el diámetro del grafo), así
+que sale último de la cola y UCS expande todo, igual que Dijkstra.
+
+Otros casos verificados: LBO → HIT = 107 con **13** expandidos; RET → CUN = 154 con **23**;
+RET → RET = 0 con 1 expandido; y en la semilla de la cátedra A → H = 20 con **7** contra 8 (G queda
+en la cola con 24 sin expandirse, como en la diapositiva de la clase 13).
 
 **Por qué corta al SACAR el destino y no al DESCUBRIRLO.** Cuando el destino aparece por primera
 vez (al relajar una arista) su distancia es solo provisoria: puede haber un camino más barato que
-pasa por un lugar que todavía está en la cola. En PAL → CUN, al expandir PAL se descubre CUN con
-**90** (calle directa); recién al expandir MON (66) baja a 66 + 18 = **84**. Cortar al descubrir
-devolvería 90, que está mal. En cambio, cuando el destino **sale** de la cola su distancia ya es
+pasa por un lugar que todavía está en la cola. En HGA → LBO, al expandir HGA se descubre LBO con
+**51** (calle directa); recién al expandir CON (15) baja a 15 + 32 = **47**. Cortar al descubrir
+devolvería 51, que está mal. En cambio, cuando el destino **sale** de la cola su distancia ya es
 definitiva: la cola entrega siempre el mínimo, así que todo lo que queda cuesta lo mismo o más, y
 como los costos son no negativos seguir caminando no puede abaratarlo. En el código, el corte está
 justo después del `poll()` y del descarte de entradas viejas:
@@ -538,7 +583,7 @@ pareja" en todas direcciones. Cuanto más cerca está el destino, más ahorra.
 **Errores** (los mismos que Dijkstra)
 
 ```
-GET /api/grafo/ucs?origen=XXX&destino=CUN
+GET /api/grafo/ucs?origen=XXX&destino=HIT
 ```
 
 ```
@@ -558,12 +603,12 @@ Costos negativos se rechazan por lo mismo que en Dijkstra: la elección greedy "
 cola ya es definitivo" deja de valer, y con ella también el corte de UCS.
 
 **Complejidad temporal: O((V + E) log V) en el peor caso**, la misma que Dijkstra.
-- Si el destino es el último en salir de la cola (RET → CUN) o es inalcanzable (la cola se vacía
+- Si el destino es el último en salir de la cola (MAT → CUN) o es inalcanzable (la cola se vacía
   sin encontrarlo), UCS expande todo: es Dijkstra completo. El análisis es el mismo: a lo sumo
   E + 1 entradas en la cola, cada `add`/`poll` O(log V).
 - En la práctica expande solo los lugares con g(n) ≤ costo del destino, así que hace menos
-  extracciones y menos relajaciones (en LBO → HIT, 8 extracciones válidas + 1 entrada vieja contra
-  12 + 1). El orden del peor caso no cambia: el ahorro es de constante, no asintótico.
+  extracciones y menos relajaciones (en OBE → HIT, 11 extracciones válidas contra las 31 de
+  Dijkstra completo). El orden del peor caso no cambia: el ahorro es de constante, no asintótico.
 - La validación de costos (O(V + E)), la reconstrucción del camino (O(V)) y la corrida extra de
   Dijkstra completo que hace el endpoint **solo para contar** `nodosExpandidosDijkstra`
   (O((V + E) log V)) no cambian el orden.
@@ -588,7 +633,8 @@ f(n) = g(n) + h(n) en vez de por g(n). En el código cambiaría solo la priorida
 - Si h sobreestima, A\* puede devolver un camino peor sin avisar (análogo a una cota de Branch &
   Bound que no es optimista).
 - En el dominio, una h admisible sería la distancia en línea recta entre dos lugares convertida a
-  minutos a pie (nunca se camina menos que la recta). No está implementada.
+  minutos a pie, h = km en línea recta × 12: como cada calle cuesta km recta × 1,25 (o más) × 12,
+  nunca se camina menos que la recta y h no sobreestima. No está implementada.
 
 ---
 
@@ -606,21 +652,22 @@ Implementación: `CaminosMinimos.floydWarshall` (`algorithm/CaminosMinimos.java`
 (origen por id y, dentro de cada origen, destino por id). Los pares **inalcanzables se omiten**: si
 una clave no está, no hay camino. La diagonal (`X->X`) vale 0.
 
-**Ejemplo** (extracto: la respuesta tiene 144 claves = 12 × 12, porque el grafo es conexo)
+**Ejemplo** (extracto: la respuesta tiene 961 claves = 31 × 31, porque el grafo es conexo)
 
 ```
 GET /api/grafo/floyd
 ```
 
 ```json
-{"ABA->ABA":0.0,"ABA->CON":36.0,"ABA->CUN":124.0, ... ,"PAL->CUN":84.0, ... ,"LBO->CUN":183.0, ... ,"RET->CUN":129.0, ...}
+{"ABA->ABA":0.0,"ABA->AEP":102.0,"ABA->AGR":117.0,"ABA->BEL":118.0, ... ,"HGA->LBO":47.0, ... ,"MAT->CUN":263.0, ... ,"RET->CUN":154.0, ... ,"RET->PMA":36.0, ...}
 ```
 
-- `PAL->CUN` = 84: igual que Dijkstra, pasa por MON (66 + 18) y no usa la calle directa de 90.
-- `RET->CUN` = 129 (RET – PAL – MON – CUN) y `LBO->CUN` = 183 (LBO – PMA – RET – PAL – MON – CUN),
-  el par más lejano del grafo.
-- La suma de los 144 valores es 9206 (lo verifica `FloydWarshallTest.sumaDeTodasLasDistancias`).
-  La matriz completa está en [`VERIFICACIONES.md`](VERIFICACIONES.md#5-floyd-warshall).
+- `HGA->LBO` = 47: igual que Dijkstra, pasa por CON (15 + 32) y no usa la calle directa de 51.
+- `RET->CUN` = 154 (RET – REC – PAL – PLA – AEP – CUN).
+- `MAT->CUN` = `CUN->MAT` = 263 (MAT – FLO – CAB – PCE – CHA – COL – BEL – MON – CUN), el par más
+  lejano del grafo (su diámetro).
+- La suma de los 961 valores es 111730 (lo verifica `FloydWarshallTest.sumaDeTodasLasDistancias`).
+  Una tabla con los pares de ejemplo está en [`VERIFICACIONES.md`](VERIFICACIONES.md#5-floyd-warshall).
 
 **Errores**
 
@@ -669,7 +716,7 @@ en el lugar no "contamina" los valores que se usan en esa misma capa.
 **Complejidad temporal: O(V³).**
 - Tres bucles anidados de V iteraciones cada uno, con trabajo O(1) adentro (una suma y una
   comparación sobre la matriz): exactamente V³ relajaciones, **sin importar cuántas aristas haya**.
-  En nuestro grafo, 12³ = 1728 (lo cuenta `/floyd/comparacion`).
+  En nuestro grafo, 31³ = 29791 (lo cuenta `/floyd/comparacion`).
 - Armar la matriz cuesta O(V² + E), verificar la diagonal O(V) y armar la respuesta O(V²): no
   cambian el orden.
 
@@ -700,8 +747,8 @@ Implementación: `CaminosMinimos.caminoFloyd` (`algorithm/CaminosMinimos.java`).
 
 | Nombre | Tipo | Obligatorio | Significado |
 |---|---|---|---|
-| `origen` | String | sí | Id del lugar de partida (ej. `PAL`). |
-| `destino` | String | sí | Id del lugar de llegada (ej. `CUN`). |
+| `origen` | String | sí | Id del lugar de partida (ej. `HGA`). |
+| `destino` | String | sí | Id del lugar de llegada (ej. `LBO`). |
 
 **Respuesta:** el mismo formato que `/dijkstra`: `vertices` (camino en orden) y `costoTotal`
 (minutos).
@@ -709,24 +756,24 @@ Implementación: `CaminosMinimos.caminoFloyd` (`algorithm/CaminosMinimos.java`).
 **Ejemplos**
 
 ```
-GET /api/grafo/floyd/camino?origen=PAL&destino=CUN
+GET /api/grafo/floyd/camino?origen=HGA&destino=LBO
 ```
 
 ```json
-{"vertices":["PAL","MON","CUN"],"costoTotal":84.0}
+{"vertices":["HGA","CON","LBO"],"costoTotal":47.0}
 ```
 
 ```
-GET /api/grafo/floyd/camino?origen=LBO&destino=CUN
+GET /api/grafo/floyd/camino?origen=MAT&destino=CUN
 ```
 
 ```json
-{"vertices":["LBO","PMA","RET","PAL","MON","CUN"],"costoTotal":183.0}
+{"vertices":["MAT","FLO","CAB","PCE","CHA","COL","BEL","MON","CUN"],"costoTotal":263.0}
 ```
 
-36 + 18 + 45 + 66 + 18 = 183, el par más lejano del grafo. Los dos coinciden con `/dijkstra`; el
-test `caminoFloydIgualADijkstraEnTodosLosPares` lo comprueba para los 144 pares (costo y vértices:
-en el dominio no hay dos caminos mínimos empatados).
+73 + 43 + 20 + 37 + 19 + 27 + 24 + 20 = 263, el par más lejano del grafo. Los dos coinciden con
+`/dijkstra`; el test `caminoFloydIgualADijkstraEnTodosLosPares` lo comprueba para los 961 pares
+(costo y vértices: en el dominio no hay dos caminos mínimos empatados).
 
 **Origen = destino:** 200 con `{"vertices":["RET"],"costoTotal":0.0}` (la diagonal vale 0 y
 `siguiente[i][i] = i`), igual que Dijkstra.
@@ -749,8 +796,8 @@ i para llegar a j por el camino mínimo.
 - **Al relajar por k** (cuando d[i][k] + d[k][j] < d[i][j]): `siguiente[i][j] = siguiente[i][k]`. El
   nuevo camino de i a j pasa por k, así que el primer paso es el mismo que para ir de i a k.
 - **Reconstrucción:** desde u = origen se salta a `siguiente[u][destino]` hasta llegar al destino.
-  Ejemplo PAL → CUN: siguiente[PAL][CUN] = MON (se actualizó al relajar por k = MON, porque
-  66 + 18 < 90), y siguiente[MON][CUN] = CUN (calle directa).
+  Ejemplo HGA → LBO: siguiente[HGA][LBO] = CON (se actualizó al relajar por k = CON, porque
+  15 + 32 < 51), y siguiente[CON][LBO] = LBO (calle directa).
 
 Es la contracara de `previo[]` en Dijkstra: Dijkstra guarda el **anterior** desde un único origen
 (un vector) y reconstruye desde el destino hacia atrás; Floyd guarda el **siguiente** para cada par
@@ -800,16 +847,16 @@ GET /api/grafo/floyd/comparacion
 ```
 
 ```json
-{"vertices":12,"operacionesFloyd":1728,"nodosExpandidosDijkstra":144,"aristasExaminadasDijkstra":504}
+{"vertices":31,"operacionesFloyd":29791,"nodosExpandidosDijkstra":961,"aristasExaminadasDijkstra":3162}
 ```
 
-- 1728 = 12³.
-- 144 = 12 corridas × 12 nodos expandidos (el grafo es conexo).
-- 504 = 12 corridas × 42 (2E = 2 × 21 entradas de adyacencia, porque cada calle está en las dos
+- 29791 = 31³.
+- 961 = 31 corridas × 31 nodos expandidos (el grafo es conexo).
+- 3162 = 31 corridas × 102 (2E = 2 × 51 entradas de adyacencia, porque cada calle está en las dos
   listas).
 
 Lo verifica `FloydWarshallTest.comparacionConDijkstraEnElDominio`. Que los dos métodos den **los
-mismos 144 valores** lo verifica `coincideConDijkstraEnTodosLosPares`.
+mismos 961 valores** lo verifica `coincideConDijkstraEnTodosLosPares`.
 
 **Errores:** si hay alguna calle con costo negativo → 400 `Dijkstra/UCS no admiten costos negativos: ...`
 (la comparación necesita correr Dijkstra, así que valida los costos antes de empezar). Un ciclo
@@ -821,14 +868,16 @@ negativo implica alguna arista negativa, así que también cae en este 400.
   - Grafo **disperso** (E ≈ V, como un mapa de calles: cada lugar solo se conecta con sus vecinos):
     O(V² log V), **menor** que V³.
   - Grafo **denso** (E ≈ V²): O(V³ log V), **mayor** que V³: ahí conviene Floyd.
-- Ejemplo de escala con la proporción de nuestro grafo (E ≈ 2V): con V = 1000, Floyd hace 10⁹
-  relajaciones; Dijkstra V veces ronda 1000 · (1000 + 2 · 2000) · log₂ 1000 ≈ 5 · 10⁷, unas 20
-  veces menos. Con V = 1000 y grafo denso (E ≈ 5 · 10⁵), Dijkstra V veces ronda 10¹⁰ y pierde.
+- Ejemplo de escala con la proporción de nuestro grafo (E ≈ 1,6 V; 51 / 31 = 1,65): con V = 1000,
+  Floyd hace 10⁹ relajaciones; Dijkstra V veces ronda 1000 · (1000 + 2 · 1600) · log₂ 1000 ≈
+  4 · 10⁷, unas 25 veces menos. Con V = 1000 y grafo denso (E ≈ 5 · 10⁵), Dijkstra V veces ronda 10¹⁰ y pierde.
 
 **Lectura honesta del ejemplo.** Las métricas no miden lo mismo con el mismo costo: cada
 relajación de Floyd es O(1), mientras que cada arista examinada por Dijkstra puede generar una
-operación de heap O(log V). Con V = 12, 504 · log₂ 12 ≈ 1800 es del mismo orden que 1728: en un
-grafo tan chico la diferencia es menor; lo que importa es cómo crece cada uno con V.
+operación de heap O(log V). Aun así, con V = 31 Dijkstra ya gana: 3162 aristas examinadas, incluso
+multiplicadas por log₂ 31 ≈ 5 (≈ 15.700), quedan por debajo de las 29791 relajaciones de Floyd. Con
+grafos todavía más chicos las dos cifras quedan del mismo orden; al crecer V la diferencia se
+agranda, que es lo que predice el análisis asintótico (V³ contra V · E · log V con E ≈ 1,6 V).
 
 **Cuándo conviene cada uno**
 
@@ -874,10 +923,10 @@ GET /api/grafo/prim?origen=RET
 ```
 
 ```json
-{"aristas":[{"origen":"RET","destino":"PMA","costo":18.0},{"origen":"RET","destino":"REC","costo":20.0},{"origen":"PMA","destino":"OBE","costo":20.0},{"origen":"OBE","destino":"ABA","costo":28.0},{"origen":"ABA","destino":"HIT","costo":19.0},{"origen":"HIT","destino":"PCE","costo":18.0},{"origen":"HIT","destino":"PAL","costo":21.0},{"origen":"PMA","destino":"CON","costo":30.0},{"origen":"CON","destino":"LBO","costo":29.0},{"origen":"PAL","destino":"MON","costo":66.0},{"origen":"MON","destino":"CUN","costo":18.0}],"costoTotal":287.0}
+{"aristas":[{"origen":"RET","destino":"OBE","costo":23.0},{"origen":"OBE","destino":"CGR","costo":18.0},{"origen":"RET","destino":"REC","costo":26.0},{"origen":"CGR","destino":"ABA","costo":27.0},{"origen":"ABA","destino":"HIT","costo":15.0},{"origen":"HIT","destino":"PCE","costo":20.0},{"origen":"PCE","destino":"CAB","costo":20.0},{"origen":"CAB","destino":"BOE","costo":27.0},{"origen":"OBE","destino":"PMA","costo":28.0},{"origen":"PMA","destino":"RES","costo":15.0},{"origen":"PMA","destino":"SAN","costo":20.0},{"origen":"SAN","destino":"CON","costo":18.0},{"origen":"CON","destino":"HGA","costo":15.0},{"origen":"CAB","destino":"PCH","costo":29.0},{"origen":"CON","destino":"LBO","costo":32.0},{"origen":"PCH","destino":"FLO","costo":36.0},{"origen":"PCE","destino":"CHA","costo":37.0},{"origen":"CHA","destino":"COL","costo":19.0},{"origen":"COL","destino":"BEL","costo":27.0},{"origen":"BEL","destino":"MON","costo":24.0},{"origen":"MON","destino":"CUN","costo":20.0},{"origen":"REC","destino":"PAL","costo":40.0},{"origen":"PAL","destino":"PLA","costo":23.0},{"origen":"PLA","destino":"AEP","costo":21.0},{"origen":"MON","destino":"SAA","costo":43.0},{"origen":"SAA","destino":"VUR","costo":35.0},{"origen":"VUR","destino":"AGR","costo":31.0},{"origen":"AGR","destino":"DEV","costo":43.0},{"origen":"DEV","destino":"VEL","costo":58.0},{"origen":"VEL","destino":"MAT","costo":45.0}],"costoTotal":835.0}
 ```
 
-11 aristas (V − 1) y 287 minutos. Son **exactamente las mismas** 11 calles que devuelve Kruskal,
+30 aristas (V − 1) y 835 minutos. Son **exactamente las mismas** 30 calles que devuelve Kruskal,
 porque el MST de nuestro grafo es único (ver README). El paso a paso está en
 [`VERIFICACIONES.md`](VERIFICACIONES.md#3-prim-desde-ret).
 
@@ -902,9 +951,9 @@ compara:
 - Prim: `costo(u, v) < key[v]` → costo de **la arista sola**, para conectar v al árbol.
 
 Por eso Dijkstra da caminos mínimos desde un origen y Prim da el árbol más barato que conecta a
-todos; en general no son el mismo árbol. Ejemplo: desde RET, Dijkstra llega a PAL por la calle
-directa RET – PAL (45 min, el camino más rápido), mientras que el MST no usa esa calle y conecta
-PAL por HIT – PAL (21 min, la calle más barata para sumarlo al árbol).
+todos; en general no son el mismo árbol. Ejemplo: desde RET, Dijkstra llega a PMA por la calle
+directa RET – PMA (36 min, el camino más rápido; por OBE serían 23 + 28 = 51), mientras que el MST
+no usa esa calle y conecta PMA por OBE – PMA (28 min, la calle más barata para sumarlo al árbol).
 
 **Complejidad temporal: O(E log V).**
 - Misma técnica de **eliminación perezosa** que Dijkstra: al bajar `key[v]` se reinserta v en la
@@ -913,12 +962,12 @@ PAL por HIT – PAL (21 min, la calle más barata para sumarlo al árbol).
   miradas). Una calle u – v solo puede generar una inserción desde el extremo que entró primero,
   así que la cola tiene a lo sumo E + 1 entradas, cada `add`/`poll` en O(log E) = O(log V).
 - Total O((V + E) log V), y como el grafo es conexo (E ≥ V − 1) queda **O(E log V)**. En el ejemplo
-  hubo 19 inserciones: 12 vértices que entran al árbol y 7 entradas viejas descartadas.
+  hubo 46 inserciones: 31 vértices que entran al árbol y 15 entradas viejas descartadas.
 
 **¿Por qué heap y no la versión O(V²) con arreglo?** La versión con matriz/arreglo busca el mínimo
 recorriendo las V `key` en cada paso: O(V²), que conviene en grafos **densos** (E ≈ V², donde el
-heap daría O(V² log V)). Nuestro grafo es **disperso**: V = 12, E = 21 (lejos de las
-V(V − 1)/2 = 66 calles posibles), así que E log V (≈ 21 · 3,6 ≈ 75) es menor que V² (144), y el
+heap daría O(V² log V)). Nuestro grafo es **disperso**: V = 31, E = 51 (lejos de las
+V(V − 1)/2 = 465 calles posibles), así que E log V (≈ 51 · 5 ≈ 253) es menor que V² (961), y el
 mapa de una ciudad a pie siempre es disperso: cada lugar se conecta solo con sus vecinos.
 
 **Complejidad espacial: O(V + E)**: arreglos `key[]`, `parent[]` e `inMST[]` (V), cola (hasta
@@ -953,10 +1002,10 @@ GET /api/grafo/kruskal
 ```
 
 ```json
-{"aristas":[{"origen":"CUN","destino":"MON","costo":18.0},{"origen":"HIT","destino":"PCE","costo":18.0},{"origen":"PMA","destino":"RET","costo":18.0},{"origen":"ABA","destino":"HIT","costo":19.0},{"origen":"OBE","destino":"PMA","costo":20.0},{"origen":"REC","destino":"RET","costo":20.0},{"origen":"HIT","destino":"PAL","costo":21.0},{"origen":"ABA","destino":"OBE","costo":28.0},{"origen":"CON","destino":"LBO","costo":29.0},{"origen":"CON","destino":"PMA","costo":30.0},{"origen":"MON","destino":"PAL","costo":66.0}],"costoTotal":287.0}
+{"aristas":[{"origen":"ABA","destino":"HIT","costo":15.0},{"origen":"CON","destino":"HGA","costo":15.0},{"origen":"PMA","destino":"RES","costo":15.0},{"origen":"CGR","destino":"OBE","costo":18.0},{"origen":"CON","destino":"SAN","costo":18.0},{"origen":"CHA","destino":"COL","costo":19.0},{"origen":"CAB","destino":"PCE","costo":20.0},{"origen":"CUN","destino":"MON","costo":20.0},{"origen":"HIT","destino":"PCE","costo":20.0},{"origen":"PMA","destino":"SAN","costo":20.0},{"origen":"AEP","destino":"PLA","costo":21.0},{"origen":"OBE","destino":"RET","costo":23.0},{"origen":"PAL","destino":"PLA","costo":23.0},{"origen":"BEL","destino":"MON","costo":24.0},{"origen":"REC","destino":"RET","costo":26.0},{"origen":"ABA","destino":"CGR","costo":27.0},{"origen":"BEL","destino":"COL","costo":27.0},{"origen":"BOE","destino":"CAB","costo":27.0},{"origen":"OBE","destino":"PMA","costo":28.0},{"origen":"CAB","destino":"PCH","costo":29.0},{"origen":"AGR","destino":"VUR","costo":31.0},{"origen":"CON","destino":"LBO","costo":32.0},{"origen":"SAA","destino":"VUR","costo":35.0},{"origen":"FLO","destino":"PCH","costo":36.0},{"origen":"CHA","destino":"PCE","costo":37.0},{"origen":"PAL","destino":"REC","costo":40.0},{"origen":"AGR","destino":"DEV","costo":43.0},{"origen":"MON","destino":"SAA","costo":43.0},{"origen":"MAT","destino":"VEL","costo":45.0},{"origen":"DEV","destino":"VEL","costo":58.0}],"costoTotal":835.0}
 ```
 
-11 aristas, 287 minutos: mismo conjunto de calles que Prim, en otro orden. Cada calle se toma una
+30 aristas, 835 minutos: mismo conjunto de calles que Prim, en otro orden. Cada calle se toma una
 sola vez (no las dos copias de la lista de adyacencia), con sus extremos en orden alfabético de id.
 Los costos salen no decrecientes; entre empates el orden es siempre el mismo porque MergeSort es
 estable. Qué calles se aceptan y cuáles se rechazan por formar ciclo está en
@@ -1025,9 +1074,9 @@ Implementación: `Backtracking.rutasSimples` (`algorithm/Backtracking.java`). El
 |---|---|---|---|
 | `origen` | String | sí | Id del lugar de partida (ej. `RET`). |
 | `destino` | String | sí | Id del lugar de llegada (ej. `CUN`). |
-| `costoMaximo` | double (≥ 0) | no (default `1000`) | Tiempo máximo de la ruta, en minutos a pie. Se aceptan rutas con costo **≤** costoMaximo. |
-| `saltosMaximos` | int (≥ 0) | no (default `10`) | Cantidad máxima de tramos (aristas) de la ruta. |
-| `infectados` | lista de String (ids separados por coma) | no | Lugares tomados por zombies: ninguna ruta pasa por ellos (ej. `infectados=REC`). Sin el parámetro, no se bloquea nada. |
+| `costoMaximo` | double (≥ 0) | no (default `200`) | Tiempo máximo de la ruta, en minutos a pie. Se aceptan rutas con costo **≤** costoMaximo. |
+| `saltosMaximos` | int (≥ 0) | no (default `8`) | Cantidad máxima de tramos (aristas) de la ruta. |
+| `infectados` | lista de String (ids separados por coma) | no | Lugares tomados por zombies: ninguna ruta pasa por ellos (ej. `infectados=PLA`). Sin el parámetro, no se bloquea nada. |
 
 **Respuesta**
 
@@ -1043,37 +1092,42 @@ Implementación: `Backtracking.rutasSimples` (`algorithm/Backtracking.java`). El
 **Ejemplo**
 
 ```
-GET /api/grafo/rutas?origen=RET&destino=CUN&costoMaximo=150&saltosMaximos=4
+GET /api/grafo/rutas?origen=RET&destino=CUN
 ```
+
+(con los valores por defecto: `costoMaximo=200`, `saltosMaximos=8`)
 
 ```json
-{"rutas":[{"vertices":["RET","PAL","CUN"],"costoTotal":135.0},{"vertices":["RET","PAL","MON","CUN"],"costoTotal":129.0},{"vertices":["RET","REC","PAL","CUN"],"costoTotal":140.0},{"vertices":["RET","REC","PAL","MON","CUN"],"costoTotal":134.0}],"nodosConPoda":118,"nodosSinPoda":684}
+{"rutas":[{"vertices":["RET","OBE","REC","PAL","PLA","AEP","CUN"],"costoTotal":182.0},{"vertices":["RET","REC","PAL","CHA","COL","BEL","MON","CUN"],"costoTotal":199.0},{"vertices":["RET","REC","PAL","PLA","AEP","CUN"],"costoTotal":154.0}],"nodosConPoda":542,"nodosSinPoda":807257}
 ```
 
-- 4 rutas de Retiro a Ciudad Universitaria en ≤ 150 minutos y ≤ 4 tramos. La más rápida,
-  RET – PAL – MON – CUN = 45 + 66 + 18 = **129**, coincide con `/dijkstra`.
-- RET – REC – PAL – CUN = 20 + 30 + 90 = 140. Las rutas que salen por OBE o PMA superan los 150
-  minutos o los 4 tramos (ej. RET – OBE – REC – PAL – CUN = 22 + 25 + 30 + 90 = 167).
-- La poda redujo la búsqueda de **684 a 118 nodos** (−83 %) y devolvió las mismas 4 rutas.
+- 3 rutas de Retiro a Ciudad Universitaria en ≤ 200 minutos y ≤ 8 tramos. La más rápida,
+  RET – REC – PAL – PLA – AEP – CUN = 26 + 40 + 23 + 21 + 44 = **154**, coincide con `/dijkstra`.
+- RET – OBE – REC – PAL – PLA – AEP – CUN = 23 + 31 + 40 + 23 + 21 + 44 = 182, y la que rodea por el
+  norte, RET – REC – PAL – CHA – COL – BEL – MON – CUN = 26 + 40 + 43 + 19 + 27 + 24 + 20 = 199 (7
+  tramos, justo debajo de los 200 minutos).
+- Salen en el orden de las listas de adyacencia: desde RET primero se prueba OBE (la de 182) y
+  después REC; desde PAL, CHA va antes que PLA.
+- La poda redujo la búsqueda de **807.257 a 542 nodos** y devolvió las mismas 3 rutas.
 
-Con un límite más ajustado (`costoMaximo=130&saltosMaximos=5`) queda una sola ruta,
-RET – PAL – MON – CUN (129), con 144 nodos con poda contra 684 sin poda (test
-`retiroCiudadUniversitaria130Minutos`). La tabla con todos los casos y una traza a mano están en
+Con límites más ajustados: `costoMaximo=180&saltosMaximos=6` deja una sola ruta, la de 154, con 305
+nodos con poda; `costoMaximo=150&saltosMaximos=5` no deja ninguna (la más rápida tarda 154), con
+153 nodos. Sin poda son siempre 807.257. La tabla con todos los casos y una traza a mano están en
 [`VERIFICACIONES.md`](VERIFICACIONES.md#6-backtracking-rutas-simples).
 
 **Con lugares infectados** (ver [Lugares infectados](#lugares-infectados-en-el-backtracking)):
 
 ```
-GET /api/grafo/rutas?origen=RET&destino=CUN&costoMaximo=150&saltosMaximos=4&infectados=REC
+GET /api/grafo/rutas?origen=RET&destino=CUN&infectados=PLA
 ```
 
 ```json
-{"rutas":[{"vertices":["RET","PAL","CUN"],"costoTotal":135.0},{"vertices":["RET","PAL","MON","CUN"],"costoTotal":129.0}],"nodosConPoda":57,"nodosSinPoda":212}
+{"rutas":[{"vertices":["RET","REC","PAL","CHA","COL","BEL","MON","CUN"],"costoTotal":199.0}],"nodosConPoda":506,"nodosSinPoda":246669}
 ```
 
-Con Recoleta infectada desaparecen las dos rutas que pasaban por REC; quedan RET – PAL – CUN (135) y
-RET – PAL – MON – CUN (129). Los nodos explorados bajan de 118 a **57** con poda y de 684 a **212**
-sin poda: todos los subárboles que entraban a REC ya no existen.
+Con el Planetario infectado desaparecen las dos rutas que pasaban por PLA; queda la del norte
+(199). Los nodos explorados bajan de 542 a **506** con poda y de 807.257 a **246.669** sin poda:
+todos los subárboles que entraban a PLA ya no existen.
 
 **Origen = destino:** una sola ruta `[RET]` de costo 0 y 1 nodo explorado (la raíz ya es el caso
 base).
@@ -1100,7 +1154,7 @@ GET /api/grafo/rutas?origen=RET&destino=XXX
 | El origen o el destino está en `infectados` | 400 | `El origen RET esta infectado: no se puede usar` (o `El destino ...`) |
 
 Si no hay ninguna ruta que cumpla, no es error: devuelve `rutas: []` con los contadores (ej.
-RET → CUN con 110 minutos y 3 tramos: 0 rutas, 47 nodos con poda, 684 sin poda).
+RET → CUN con 150 minutos y 5 tramos: 0 rutas, 153 nodos con poda, 807.257 sin poda).
 
 **Cómo funciona (backtracking de tipo 2).** Es el esquema de la clase 9 de N reinas o Sudoku: cada
 llamada recorre **en un bucle las opciones** (los vecinos del lugar actual) y hace una llamada
@@ -1118,7 +1172,7 @@ recursiva por cada opción viable.
 6. **Retroceso (deshacer):** al volver de la llamada se saca w del camino y se **desmarca**
    (`visitado[w] = false`). Desmarcar es lo que distingue al backtracking de un DFS: en DFS un lugar
    visitado queda marcado para siempre; acá w puede volver a usarse **por otro camino** (por ejemplo,
-   PAL aparece en las 4 rutas del ejemplo, llegando desde RET o desde REC).
+   REC aparece en las 3 rutas del ejemplo, llegando desde OBE o desde RET).
 
 **¿Por qué con y sin poda dan las mismas rutas?** La poda solo corta cuando el costo acumulado ya
 supera el máximo o los saltos ya superan el límite. Como los costos son **no negativos** (minutos a
@@ -1128,17 +1182,23 @@ descarta recién al llegar al destino (`registrarSiCumple`). Por eso la poda **n
 solo ahorra trabajo. Lo verifica `conYSinPodaDevuelvenLasMismasRutas`. (Con costos negativos la poda
 por costo sería incorrecta; en el dominio no existen.)
 
-**¿Por qué `nodosSinPoda` vale siempre 684 para RET → CUN?** Sin poda la búsqueda no mira los
+**¿Por qué `nodosSinPoda` vale siempre 807.257 para RET → CUN?** Sin poda la búsqueda no mira los
 límites, así que su árbol es siempre el mismo: todos los caminos simples que salen de RET sin pasar
 por CUN como intermedio (más los que terminan en CUN). Solo depende del origen, el destino y el grafo.
 
-**¿Por qué con `costoMaximo=1000&saltosMaximos=10` la poda casi no ahorra (682 contra 684)?** Porque
-los límites no restringen: el camino simple más largo de RET a CUN tarda 327 minutos (muy por debajo
-de 1000), así que la poda por costo nunca se activa. La de saltos solo corta los 2 caminos de 11
-tramos, los que recorren los 12 lugares (RET – PMA – LBO – CON – OBE – REC – ABA – PCE – HIT – PAL –
-MON – CUN y RET – REC – OBE – PMA – LBO – CON – ABA – PCE – HIT – PAL – MON – CUN): 684 − 2 = 682.
-Devuelve 110 rutas. **La poda sirve cuando las restricciones son ajustadas**; con límites holgados
-el backtracking tiende a la enumeración completa.
+**¿Cuándo ahorra la poda y cuándo no?** Depende de qué tan ajustados sean los límites:
+
+| Límites RET → CUN | Rutas | Con poda | Sin poda |
+|---|---|---|---|
+| 200 min, 8 tramos (defaults) | 3 | 542 | 807.257 |
+| 1000 min, 10 tramos | 145 | 6.018 | 807.257 |
+| 1000 min, 1000 tramos (sin límite efectivo) | 93.637 | 804.622 | 807.257 |
+
+Con 1000 minutos y 10 tramos el que poda es el límite de **tramos**: corta todos los caminos de más
+de 10, y queda en 6.018 nodos. Con 1000 minutos y tramos sin límite, la poda casi no ahorra (2.635
+nodos, 0,3 %): el camino simple más largo de RET a CUN tarda 1136 minutos, así que solo los muy
+largos superan los 1000, y devuelve 93.637 rutas. **La poda sirve cuando las restricciones son
+ajustadas**; con límites holgados el backtracking tiende a la enumeración completa.
 
 <a id="lugares-infectados-en-el-backtracking"></a>
 **Lugares infectados.** El backtracking ya tiene `visitado[]` para que la ruta sea simple. Cada
@@ -1152,8 +1212,8 @@ marcó, los infectados quedan marcados toda la corrida. El `bloqueado[]` lo arma
 O(V + I) una vez (más O(V) por cada `clone`) y el chequeo por opción sigue siendo O(1). En la
 práctica **se explora todavía menos**: un infectado funciona como una poda más, que corta antes de
 entrar al nodo (no cuenta como explorado) y elimina de una vez **todos los subárboles** que
-colgaban de él, también en la corrida sin poda. En el ejemplo con REC infectado: 118 → 57 nodos con
-poda y 684 → 212 sin poda. Es lo mismo que correr el backtracking sobre el grafo sin esos I lugares.
+colgaban de él, también en la corrida sin poda. En el ejemplo con PLA infectado: 542 → 506 nodos
+con poda y 807.257 → 246.669 sin poda. Es lo mismo que correr el backtracking sobre el grafo sin esos I lugares.
 
 **Complejidad temporal: O(b^L) nodos, O(V!) en el peor caso.**
 - L = min(saltosMaximos, V − 1) es la profundidad máxima del árbol (un camino simple tiene a lo sumo
@@ -1831,11 +1891,12 @@ GET /api/mapa
 ```
 
 ```json
-{"lugares":[{"id":"ABA","nombre":"Abasto","tipo":"REFUGIO","valor":400.0},{"id":"CON","nombre":"Constitucion","tipo":"ESTACION","valor":250.0}, ...],
- "calles":[{"origen":"ABA","destino":"HIT","costo":19.0},{"origen":"ABA","destino":"PCE","costo":30.0}, ...]}
+{"lugares":[{"id":"ABA","nombre":"Abasto","tipo":"REFUGIO","valor":400.0},{"id":"AEP","nombre":"Aeroparque","tipo":"ESTACION","valor":350.0}, ...],
+ "calles":[{"origen":"ABA","destino":"BOE","costo":36.0},{"origen":"ABA","destino":"CGR","costo":27.0}, ...]}
 ```
 
-Con la carga inicial: 12 lugares y 21 calles (lo verifica `MapaTest`, sin Neo4j).
+Con la carga inicial: 31 lugares y 51 calles, con costos que suman 1782 minutos (lo verifica
+`MapaTest`, sin Neo4j).
 
 **Complejidad: O(V + E)** en tiempo y espacio: la carga del grafo es O(V + E), indexar los nodos en
 un `HashMap` es O(V) y recorrer las listas de adyacencia (2E entradas) emitiendo cada calle desde su

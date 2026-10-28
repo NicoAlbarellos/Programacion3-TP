@@ -3,15 +3,41 @@
 Evidencia que piden los hitos: los resultados de los algoritmos **calculados a mano sobre el grafo
 del grupo** y comparados con la salida real de los endpoints y con los tests.
 
-Grafo: 12 lugares de CABA, 21 calles no dirigidas, costo en **minutos a pie** (tabla y diagrama en
-el [README](../README.md#calles-21-aristas-costo-en-minutos-a-pie)).
+Grafo: 31 lugares de CABA, 51 calles no dirigidas, costo en **minutos a pie** (tabla de calles y
+diagrama en el [README](../README.md); fuente única de los datos: `seed/DominioCaba.java`).
 
 Notación de las tablas: `d/p` = distancia (o key) / vértice previo (o padre). `∞` = todavía no
 alcanzado. En **negrita**, los vértices ya extraídos (su valor es definitivo).
 
+Los vecinos de cada lugar se miran en el orden de su lista de adyacencia, que es el orden
+alfabético de ids (las calles se cargan ordenadas por `(origen, destino)`):
+
+| Lugar | Vecinos (minutos) | Lugar | Vecinos (minutos) |
+|---|---|---|---|
+| ABA | BOE 36, CGR 27, HIT 15, REC 36 | LBO | CON 32, HGA 51, SAN 34 |
+| AEP | BEL 59, CUN 44, PLA 21 | MAT | FLO 73, VEL 45 |
+| AGR | CHA 45, DEV 43, VUR 31 | MON | BEL 24, CUN 20, SAA 43 |
+| BEL | AEP 59, COL 27, MON 24, SAA 44 | OBE | CGR 18, CON 40, PMA 28, REC 31, RET 23 |
+| BOE | ABA 36, CAB 27, HGA 36, PCH 35 | PAL | CHA 43, HIT 43, PLA 23, REC 40 |
+| CAB | BOE 27, FLO 43, PCE 20, PCH 29 | PCE | CAB 20, CHA 37, HIT 20 |
+| CGR | ABA 27, CON 33, OBE 18 | PCH | BOE 35, CAB 29, FLO 36 |
+| CHA | AGR 45, COL 19, PAL 43, PCE 37 | PLA | AEP 21, COL 50, PAL 23 |
+| COL | BEL 27, CHA 19, PLA 50, VUR 56 | PMA | OBE 28, RES 15, RET 36, SAN 20 |
+| CON | CGR 33, HGA 15, LBO 32, OBE 40, SAN 18 | REC | ABA 36, OBE 31, PAL 40, RET 26 |
+| CUN | AEP 44, MON 20 | RES | PMA 15 |
+| DEV | AGR 43, VEL 58 | RET | OBE 23, PMA 36, REC 26 |
+| FLO | CAB 43, MAT 73, PCH 36, VEL 79 | SAA | BEL 44, MON 43, VUR 35 |
+| HGA | BOE 36, CON 15, LBO 51 | SAN | CON 18, LBO 34, PMA 20 |
+| HIT | ABA 15, PAL 43, PCE 20 | VEL | DEV 58, FLO 79, MAT 45 |
+| | | VUR | AGR 31, COL 56, SAA 35 |
+
+Cómo se obtuvieron los números: las trazas se calcularon a mano y se contrastaron con una copia
+instrumentada de las clases de `algorithm/` (mismo código, con impresiones en cada paso) corrida
+sobre `DominioCaba`, con los tests (`./mvnw test`) y con la salida real de los endpoints.
+
 ## Índice
 
-1. [Dijkstra desde PAL](#1-dijkstra-desde-pal)
+1. [Dijkstra desde HGA](#1-dijkstra-desde-hga)
 2. [Kruskal](#2-kruskal)
 3. [Prim desde RET](#3-prim-desde-ret)
 4. [Greedy vs. mochila 0/1 con PD](#4-greedy-vs-mochila-01-con-pd)
@@ -23,83 +49,111 @@ alcanzado. En **negrita**, los vértices ya extraídos (su valor es definitivo).
 
 ---
 
-## 1. Dijkstra desde PAL
+## 1. Dijkstra desde HGA
 
-Consulta: `GET /api/grafo/dijkstra?origen=PAL&destino=CUN`. Interesa porque existe la calle
-directa PAL – CUN de 90 minutos, pero la ruta más rápida es por el Monumental.
+Consulta: `GET /api/grafo/dijkstra?origen=HGA&destino=LBO`. Interesa porque existe la calle
+directa Garrahan – La Boca de **51** minutos (rodea las vías del Roca y la autopista), pero la ruta
+más rápida es por Constitución: **15 + 32 = 47**. Si el algoritmo devolviera 51, no estaría
+relajando bien.
 
-Inicialización: dist[PAL] = 0, el resto ∞; previo[] = — para todos; cola = {(PAL, 0)}.
+Inicialización: dist[HGA] = 0, el resto ∞; previo[] = — para todos; cola = {(HGA, 0)}.
 
 En cada paso se extrae de la cola el vértice no procesado con menor dist[] y se **relaja** cada
 calle (u, v): si dist[u] + costo < dist[v], se actualiza dist[v], previo[v] = u y se encola
-(v, dist[v]). Los vecinos se miran en el orden de la lista de adyacencia.
+(v, dist[v]). Si sale de la cola una entrada con distancia mayor que dist[u] (entrada vieja), se
+descarta (eliminación perezosa, porque `PriorityQueue` no tiene decreaseKey).
+
+`/dijkstra` calcula el árbol de caminos mínimos **completo** (no corta al sacar el destino; eso es
+lo que agrega UCS, sección 8), así que la traza tiene los 31 pasos.
 
 ### Relajaciones de cada paso
 
-| Paso | Se extrae (dist) | Relajaciones exitosas | Relajaciones que no mejoran |
+| Paso | Se extrae (dist / previo) | Relajaciones exitosas | Relajaciones que no mejoran |
 |---|---|---|---|
-| 1 | PAL (0) | HIT 0+21=21, CUN 0+90=90, MON 0+66=66, REC 0+30=30, RET 0+45=45 | — |
-| 2 | HIT (21) | ABA 21+19=40, PCE 21+18=39 | PAL ya procesado |
-| 3 | REC (30) | OBE 30+25=55 | ABA 30+29=59 ≥ 40; RET 30+20=50 ≥ 45 |
-| 4 | PCE (39) | — | ABA 39+30=69 ≥ 40 |
-| 5 | ABA (40) | CON 40+36=76 | OBE 40+28=68 ≥ 55 |
-| 6 | RET (45) | PMA 45+18=63 | OBE 45+22=67 ≥ 55 |
-| 7 | OBE (55) | — | CON 55+31=86 ≥ 76; PMA 55+20=75 ≥ 63 |
-| 8 | PMA (63) | LBO 63+36=99 | CON 63+30=93 ≥ 76 |
-| 9 | MON (66) | **CUN 66+18=84 < 90** | — |
-| 10 | CON (76) | — | LBO 76+29=105 ≥ 99 |
-| 11 | CUN (84) | — | — |
-| — | (CUN, 90) | entrada vieja: 90 > dist[CUN] = 84, **se descarta** | |
-| 12 | LBO (99) | — | — |
+| 1 | HGA (0 / —) | BOE 0+36=36, CON 0+15=15, LBO 0+51=51 | — |
+| 2 | CON (15 / HGA) | CGR 15+33=48, **LBO 15+32=47 < 51**, OBE 15+40=55, SAN 15+18=33 | — |
+| 3 | SAN (33 / CON) | PMA 33+20=53 | LBO 33+34=67 ≥ 47 |
+| 4 | BOE (36 / HGA) | ABA 36+36=72, CAB 36+27=63, PCH 36+35=71 | — |
+| 5 | **LBO (47 / CON)** | — | — |
+| 6 | CGR (48 / CON) | — | ABA 48+27=75 ≥ 72; OBE 48+18=66 ≥ 55 |
+| — | (LBO, 51) | entrada vieja: 51 > dist[LBO] = 47, **se descarta** | |
+| 7 | PMA (53 / SAN) | RES 53+15=68, RET 53+36=89 | OBE 53+28=81 ≥ 55 |
+| 8 | OBE (55 / CON) | REC 55+31=86, **RET 55+23=78 < 89** | — |
+| 9 | CAB (63 / BOE) | FLO 63+43=106, PCE 63+20=83 | PCH 63+29=92 ≥ 71 |
+| 10 | RES (68 / PMA) | — | — |
+| 11 | PCH (71 / BOE) | — | FLO 71+36=107 ≥ 106 |
+| 12 | ABA (72 / BOE) | HIT 72+15=87 | REC 72+36=108 ≥ 86 |
+| 13 | RET (78 / OBE) | — | REC 78+26=104 ≥ 86 |
+| 14 | PCE (83 / CAB) | CHA 83+37=120 | HIT 83+20=103 ≥ 87 |
+| 15 | REC (86 / OBE) | PAL 86+40=126 | — |
+| 16 | HIT (87 / ABA) | — | PAL 87+43=130 ≥ 126 |
+| — | (RET, 89) | entrada vieja: 89 > dist[RET] = 78, **se descarta** | |
+| 17 | FLO (106 / CAB) | MAT 106+73=179, VEL 106+79=185 | — |
+| 18 | CHA (120 / PCE) | AGR 120+45=165, COL 120+19=139 | PAL 120+43=163 ≥ 126 |
+| 19 | PAL (126 / REC) | PLA 126+23=149 | — |
+| 20 | COL (139 / CHA) | BEL 139+27=166, VUR 139+56=195 | PLA 139+50=189 ≥ 149 |
+| 21 | PLA (149 / PAL) | AEP 149+21=170 | — |
+| 22 | AGR (165 / CHA) | DEV 165+43=208 | VUR 165+31=196 ≥ 195 |
+| 23 | BEL (166 / COL) | MON 166+24=190, SAA 166+44=210 | AEP 166+59=225 ≥ 170 |
+| 24 | AEP (170 / PLA) | CUN 170+44=214 | — |
+| 25 | MAT (179 / FLO) | — | VEL 179+45=224 ≥ 185 |
+| 26 | VEL (185 / FLO) | — | DEV 185+58=243 ≥ 208 |
+| 27 | MON (190 / BEL) | **CUN 190+20=210 < 214** | SAA 190+43=233 ≥ 210 |
+| 28 | VUR (195 / COL) | — | SAA 195+35=230 ≥ 210 |
+| 29 | DEV (208 / AGR) | — | — |
+| 30 | SAA (210 / BEL) | — | — |
+| 31 | CUN (210 / MON) | — | — |
+| — | (CUN, 214) | entrada vieja: 214 > dist[CUN] = 210, **se descarta**; la cola queda vacía | |
 
-(En "no mejoran" se omiten los vecinos ya procesados, que nunca mejoran con costos ≥ 0.)
+(En "no mejoran" se omiten los vecinos ya procesados, que nunca mejoran con costos ≥ 0. En los
+pasos 30 y 31 SAA y CUN empatan en 210: cualquier orden es correcto y no cambia ningún valor.)
 
-### Estado de dist[] / previo[] después de cada paso
+### Estado de dist[] / previo[] hasta que LBO queda definitivo
 
-| Paso | Extrae | HIT | REC | PCE | ABA | RET | OBE | PMA | MON | CON | CUN | LBO |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 0 | — | ∞ | ∞ | ∞ | ∞ | ∞ | ∞ | ∞ | ∞ | ∞ | ∞ | ∞ |
-| 1 | PAL | 21/PAL | 30/PAL | ∞ | ∞ | 45/PAL | ∞ | ∞ | 66/PAL | ∞ | 90/PAL | ∞ |
-| 2 | HIT | **21/PAL** | 30/PAL | 39/HIT | 40/HIT | 45/PAL | ∞ | ∞ | 66/PAL | ∞ | 90/PAL | ∞ |
-| 3 | REC | **21/PAL** | **30/PAL** | 39/HIT | 40/HIT | 45/PAL | 55/REC | ∞ | 66/PAL | ∞ | 90/PAL | ∞ |
-| 4 | PCE | **21/PAL** | **30/PAL** | **39/HIT** | 40/HIT | 45/PAL | 55/REC | ∞ | 66/PAL | ∞ | 90/PAL | ∞ |
-| 5 | ABA | **21/PAL** | **30/PAL** | **39/HIT** | **40/HIT** | 45/PAL | 55/REC | ∞ | 66/PAL | 76/ABA | 90/PAL | ∞ |
-| 6 | RET | **21/PAL** | **30/PAL** | **39/HIT** | **40/HIT** | **45/PAL** | 55/REC | 63/RET | 66/PAL | 76/ABA | 90/PAL | ∞ |
-| 7 | OBE | **21/PAL** | **30/PAL** | **39/HIT** | **40/HIT** | **45/PAL** | **55/REC** | 63/RET | 66/PAL | 76/ABA | 90/PAL | ∞ |
-| 8 | PMA | **21/PAL** | **30/PAL** | **39/HIT** | **40/HIT** | **45/PAL** | **55/REC** | **63/RET** | 66/PAL | 76/ABA | 90/PAL | 99/PMA |
-| 9 | MON | **21/PAL** | **30/PAL** | **39/HIT** | **40/HIT** | **45/PAL** | **55/REC** | **63/RET** | **66/PAL** | 76/ABA | 84/MON | 99/PMA |
-| 10 | CON | **21/PAL** | **30/PAL** | **39/HIT** | **40/HIT** | **45/PAL** | **55/REC** | **63/RET** | **66/PAL** | **76/ABA** | 84/MON | 99/PMA |
-| 11 | CUN | **21/PAL** | **30/PAL** | **39/HIT** | **40/HIT** | **45/PAL** | **55/REC** | **63/RET** | **66/PAL** | **76/ABA** | **84/MON** | 99/PMA |
-| 12 | LBO | **21/PAL** | **30/PAL** | **39/HIT** | **40/HIT** | **45/PAL** | **55/REC** | **63/RET** | **66/PAL** | **76/ABA** | **84/MON** | **99/PMA** |
+Solo las columnas de los lugares que se descubren en esos pasos (el resto sigue en ∞).
 
-dist[PAL] = 0 durante todo el algoritmo (es el origen).
+| Paso | Extrae | CON | SAN | BOE | LBO | CGR | PMA | OBE | CAB | PCH | ABA |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 0 | — | ∞ | ∞ | ∞ | ∞ | ∞ | ∞ | ∞ | ∞ | ∞ | ∞ |
+| 1 | HGA | 15/HGA | ∞ | 36/HGA | 51/HGA | ∞ | ∞ | ∞ | ∞ | ∞ | ∞ |
+| 2 | CON | **15/HGA** | 33/CON | 36/HGA | 47/CON | 48/CON | ∞ | 55/CON | ∞ | ∞ | ∞ |
+| 3 | SAN | **15/HGA** | **33/CON** | 36/HGA | 47/CON | 48/CON | 53/SAN | 55/CON | ∞ | ∞ | ∞ |
+| 4 | BOE | **15/HGA** | **33/CON** | **36/HGA** | 47/CON | 48/CON | 53/SAN | 55/CON | 63/BOE | 71/BOE | 72/BOE |
+| 5 | LBO | **15/HGA** | **33/CON** | **36/HGA** | **47/CON** | 48/CON | 53/SAN | 55/CON | 63/BOE | 71/BOE | 72/BOE |
 
-### Reconstrucción del camino PAL → CUN
+dist[HGA] = 0 durante todo el algoritmo (es el origen). Desde el paso 5 dist[LBO] = 47 ya no puede
+cambiar: todo lo que queda en la cola cuesta 48 o más y los costos son ≥ 0.
 
-Se sigue previo[] desde el destino: previo[CUN] = MON, previo[MON] = PAL, previo[PAL] = —.
-Camino: **PAL → MON → CUN, 66 + 18 = 84 minutos**.
+### Reconstrucción del camino HGA → LBO
 
-La calle directa PAL – CUN (90) dejó dist[CUN] = 90 en el paso 1; la relajación de MON – CUN en el
-paso 9 la mejora a 84. Ese es el punto de esta verificación: si el algoritmo devolviera 90, no
-estaría relajando bien.
+Se sigue previo[] desde el destino: previo[LBO] = CON, previo[CON] = HGA, previo[HGA] = —.
+Camino: **HGA → CON → LBO, 15 + 32 = 47 minutos**.
+
+La calle directa HGA – LBO dejó dist[LBO] = 51 en el paso 1; la relajación de CON – LBO en el paso 2
+la mejora a 47 y previo[LBO] pasa de HGA a CON. La entrada (LBO, 51) queda en la cola y se
+descarta cuando sale, después del paso 6.
+
+Con la misma tabla se lee cualquier otro tiempo mínimo desde HGA. Por ejemplo HGA → CUN = 210:
+previo[CUN] = MON, previo[MON] = BEL, previo[BEL] = COL, previo[COL] = CHA, previo[CHA] = PCE,
+previo[PCE] = CAB, previo[CAB] = BOE, previo[BOE] = HGA, o sea
+HGA → BOE → CAB → PCE → CHA → COL → BEL → MON → CUN = 36 + 27 + 20 + 37 + 19 + 27 + 24 + 20 = 210.
+Ahí también hubo relajación: CUN se descubrió con 214 por Aeroparque (paso 24) y bajó a 210 por el
+Monumental (paso 27).
 
 ### Comparación con la salida real
 
 ```
-GET /api/grafo/dijkstra?origen=PAL&destino=CUN
-{"vertices":["PAL","MON","CUN"],"costoTotal":84.0}
+GET /api/grafo/dijkstra?origen=HGA&destino=LBO
+{"vertices":["HGA","CON","LBO"],"costoTotal":47.0}
 ```
 
 Coincide con el cálculo a mano. Lo verifica también
-`CaminosMinimosTest.relajacionEvitaElDirectoPalermoCiudadUniversitaria`.
+`CaminosMinimosTest.relajacionEvitaElDirectoGarrahanLaBoca`.
 
-Conteo de la cola: 13 inserciones (el origen + 12 relajaciones exitosas) y 13 extracciones
-(12 vértices procesados + 1 entrada vieja descartada), consistente con "a lo sumo E + 1 entradas".
-
-Con la misma tabla se lee el resto de los tiempos mínimos desde PAL, por ejemplo PAL → LBO = 99
-(PAL → RET → PMA → LBO). Para RET → CUN el endpoint devuelve RET → PAL → MON → CUN = 45 + 66 + 18
-= 129 (por la calle directa PAL – CUN serían 135), también cubierto por
-`CaminosMinimosTest.retiroACiudadUniversitaria`.
+Conteo de la cola: 34 inserciones (el origen + 33 relajaciones exitosas) y 34 extracciones
+(31 vértices procesados + 3 entradas viejas descartadas: LBO 51, RET 89, CUN 214). Las 33
+relajaciones exitosas no superan E = 51: en un grafo no dirigido cada calle mejora a lo sumo una
+vez (desde el primero de sus extremos que se procesa), consistente con "a lo sumo E + 1 entradas".
 
 ---
 
@@ -107,47 +161,88 @@ Con la misma tabla se lee el resto de los tiempos mínimos desde PAL, por ejempl
 
 Consulta: `GET /api/grafo/kruskal`.
 
-**Paso 1: ordenar las 21 calles por costo creciente** (MergeSort, estable: entre empates queda el
-orden en que se listan las calles, por id de sus extremos).
+**Paso 1: ordenar las 51 calles por costo creciente** (MergeSort propio, estable: entre empates
+queda el orden en que se listan, que es el de las listas de adyacencia, por id de sus extremos).
 
 **Paso 2: recorrerlas en orden.** Para cada calle (u, v): si find(u) ≠ find(v), están en
 componentes distintas y se **acepta** (union(u, v)); si find(u) = find(v), ya están conectados y la
-calle **cerraría un ciclo**: se **rechaza**. Se corta al llegar a V − 1 = 11 aristas.
+calle **cerraría un ciclo**: se **rechaza**. Se corta al llegar a V − 1 = 30 aristas.
 
-| # | Calle | Costo | find(u) = find(v)? | Decisión | Componente resultante / ciclo que cerraría | Aristas | Total |
+En "Componente" se indica cuántos lugares tiene la componente que queda después de aceptar; en los
+rechazos, el ciclo que cerraría (el camino que ya los une en el bosque) y su calle más cara.
+
+| # | Calle | Costo | ¿find(u) = find(v)? | Decisión | Componente resultante / ciclo que cerraría | Aristas | Total |
 |---|---|---|---|---|---|---|---|
-| 1 | CUN – MON | 18 | no | Acepta | {CUN, MON} | 1 | 18 |
-| 2 | HIT – PCE | 18 | no | Acepta | {HIT, PCE} | 2 | 36 |
-| 3 | PMA – RET | 18 | no | Acepta | {PMA, RET} | 3 | 54 |
-| 4 | ABA – HIT | 19 | no | Acepta | {ABA, HIT, PCE} | 4 | 73 |
-| 5 | OBE – PMA | 20 | no | Acepta | {OBE, PMA, RET} | 5 | 93 |
-| 6 | REC – RET | 20 | no | Acepta | {OBE, PMA, REC, RET} | 6 | 113 |
-| 7 | HIT – PAL | 21 | no | Acepta | {ABA, HIT, PAL, PCE} | 7 | 134 |
-| 8 | OBE – RET | 22 | **sí** | Rechaza | OBE – PMA – RET | 7 | 134 |
-| 9 | OBE – REC | 25 | **sí** | Rechaza | OBE – PMA – RET – REC | 7 | 134 |
-| 10 | ABA – OBE | 28 | no | Acepta | {ABA, HIT, OBE, PAL, PCE, PMA, REC, RET} | 8 | 162 |
-| 11 | ABA – REC | 29 | **sí** | Rechaza | ABA – OBE – PMA – RET – REC | 8 | 162 |
-| 12 | CON – LBO | 29 | no | Acepta | {CON, LBO} | 9 | 191 |
-| 13 | ABA – PCE | 30 | **sí** | Rechaza | ABA – HIT – PCE | 9 | 191 |
-| 14 | CON – PMA | 30 | no | Acepta | {ABA, CON, HIT, LBO, OBE, PAL, PCE, PMA, REC, RET} | 10 | 221 |
-| 15 | PAL – REC | 30 | **sí** | Rechaza | PAL – HIT – ABA – OBE – PMA – RET – REC | 10 | 221 |
-| 16 | CON – OBE | 31 | **sí** | Rechaza | CON – PMA – OBE | 10 | 221 |
-| 17 | ABA – CON | 36 | **sí** | Rechaza | ABA – OBE – PMA – CON | 10 | 221 |
-| 18 | LBO – PMA | 36 | **sí** | Rechaza | LBO – CON – PMA | 10 | 221 |
-| 19 | PAL – RET | 45 | **sí** | Rechaza | PAL – HIT – ABA – OBE – PMA – RET | 10 | 221 |
-| 20 | MON – PAL | 66 | no | Acepta | los 12 lugares | **11** | **287** |
-| 21 | CUN – PAL | 90 | — | No se evalúa: ya hay 11 aristas | | 11 | 287 |
+| 1 | ABA – HIT | 15 | no | Acepta | 2 lugares | 1 | 15 |
+| 2 | CON – HGA | 15 | no | Acepta | 2 lugares | 2 | 30 |
+| 3 | PMA – RES | 15 | no | Acepta | 2 lugares | 3 | 45 |
+| 4 | CGR – OBE | 18 | no | Acepta | 2 lugares | 4 | 63 |
+| 5 | CON – SAN | 18 | no | Acepta | 3 lugares {CON, HGA, SAN} | 5 | 81 |
+| 6 | CHA – COL | 19 | no | Acepta | 2 lugares | 6 | 100 |
+| 7 | CAB – PCE | 20 | no | Acepta | 2 lugares | 7 | 120 |
+| 8 | CUN – MON | 20 | no | Acepta | 2 lugares | 8 | 140 |
+| 9 | HIT – PCE | 20 | no | Acepta | 4 lugares {ABA, CAB, HIT, PCE} | 9 | 160 |
+| 10 | PMA – SAN | 20 | no | Acepta | 5 lugares {CON, HGA, PMA, RES, SAN} | 10 | 180 |
+| 11 | AEP – PLA | 21 | no | Acepta | 2 lugares | 11 | 201 |
+| 12 | OBE – RET | 23 | no | Acepta | 3 lugares {CGR, OBE, RET} | 12 | 224 |
+| 13 | PAL – PLA | 23 | no | Acepta | 3 lugares {AEP, PAL, PLA} | 13 | 247 |
+| 14 | BEL – MON | 24 | no | Acepta | 3 lugares {BEL, CUN, MON} | 14 | 271 |
+| 15 | REC – RET | 26 | no | Acepta | 4 lugares {CGR, OBE, REC, RET} | 15 | 297 |
+| 16 | ABA – CGR | 27 | no | Acepta | 8 lugares | 16 | 324 |
+| 17 | BEL – COL | 27 | no | Acepta | 5 lugares {BEL, CHA, COL, CUN, MON} | 17 | 351 |
+| 18 | BOE – CAB | 27 | no | Acepta | 9 lugares | 18 | 378 |
+| 19 | OBE – PMA | 28 | no | Acepta | 14 lugares | 19 | 406 |
+| 20 | CAB – PCH | 29 | no | Acepta | 15 lugares | 20 | 435 |
+| 21 | AGR – VUR | 31 | no | Acepta | 2 lugares | 21 | 466 |
+| 22 | OBE – REC | 31 | **sí** | Rechaza | OBE – RET – REC (máx. 26) | 21 | 466 |
+| 23 | CON – LBO | 32 | no | Acepta | 16 lugares | 22 | 498 |
+| 24 | CGR – CON | 33 | **sí** | Rechaza | CGR – OBE – PMA – SAN – CON (máx. 28) | 22 | 498 |
+| 25 | LBO – SAN | 34 | **sí** | Rechaza | LBO – CON – SAN (máx. 32) | 22 | 498 |
+| 26 | BOE – PCH | 35 | **sí** | Rechaza | BOE – CAB – PCH (máx. 29) | 22 | 498 |
+| 27 | SAA – VUR | 35 | no | Acepta | 3 lugares {AGR, SAA, VUR} | 23 | 533 |
+| 28 | ABA – BOE | 36 | **sí** | Rechaza | ABA – HIT – PCE – CAB – BOE (máx. 27) | 23 | 533 |
+| 29 | ABA – REC | 36 | **sí** | Rechaza | ABA – CGR – OBE – RET – REC (máx. 27) | 23 | 533 |
+| 30 | BOE – HGA | 36 | **sí** | Rechaza | BOE – CAB – PCE – HIT – ABA – CGR – OBE – PMA – SAN – CON – HGA (máx. 28) | 23 | 533 |
+| 31 | FLO – PCH | 36 | no | Acepta | 17 lugares | 24 | 569 |
+| 32 | PMA – RET | 36 | **sí** | Rechaza | PMA – OBE – RET (máx. 28) | 24 | 569 |
+| 33 | CHA – PCE | 37 | no | Acepta | 22 lugares | 25 | 606 |
+| 34 | CON – OBE | 40 | **sí** | Rechaza | CON – SAN – PMA – OBE (máx. 28) | 25 | 606 |
+| 35 | PAL – REC | 40 | no | Acepta | 25 lugares | 26 | 646 |
+| 36 | AGR – DEV | 43 | no | Acepta | 4 lugares {AGR, DEV, SAA, VUR} | 27 | 689 |
+| 37 | CAB – FLO | 43 | **sí** | Rechaza | CAB – PCH – FLO (máx. 36) | 27 | 689 |
+| 38 | CHA – PAL | 43 | **sí** | Rechaza | CHA – PCE – HIT – ABA – CGR – OBE – RET – REC – PAL (máx. 40) | 27 | 689 |
+| 39 | HIT – PAL | 43 | **sí** | Rechaza | HIT – ABA – CGR – OBE – RET – REC – PAL (máx. 40) | 27 | 689 |
+| 40 | MON – SAA | 43 | no | Acepta | 29 lugares | 28 | 732 |
+| 41 | AEP – CUN | 44 | **sí** | Rechaza | AEP – PLA – PAL – REC – RET – OBE – CGR – ABA – HIT – PCE – CHA – COL – BEL – MON – CUN (máx. 40) | 28 | 732 |
+| 42 | BEL – SAA | 44 | **sí** | Rechaza | BEL – MON – SAA (máx. 43) | 28 | 732 |
+| 43 | AGR – CHA | 45 | **sí** | Rechaza | AGR – VUR – SAA – MON – BEL – COL – CHA (máx. 43) | 28 | 732 |
+| 44 | MAT – VEL | 45 | no | Acepta | 2 lugares | 29 | 777 |
+| 45 | COL – PLA | 50 | **sí** | Rechaza | COL – CHA – PCE – HIT – ABA – CGR – OBE – RET – REC – PAL – PLA (máx. 40) | 29 | 777 |
+| 46 | HGA – LBO | 51 | **sí** | Rechaza | HGA – CON – LBO (máx. 32) | 29 | 777 |
+| 47 | COL – VUR | 56 | **sí** | Rechaza | COL – BEL – MON – SAA – VUR (máx. 43) | 29 | 777 |
+| 48 | DEV – VEL | 58 | no | Acepta | los 31 lugares | **30** | **835** |
+| 49 | AEP – BEL | 59 | — | No se evalúa: ya hay 30 aristas | | 30 | 835 |
+| 50 | FLO – MAT | 73 | — | No se evalúa | | 30 | 835 |
+| 51 | FLO – VEL | 79 | — | No se evalúa | | 30 | 835 |
 
-**Resultado: 11 aristas, 287 minutos.** Se aceptaron 11 calles y se rechazaron 9 por formar ciclo;
-la última (CUN – PAL, 90) ni se mira porque el árbol ya está completo.
+**Resultado: 30 aristas, 835 minutos.** De las 48 calles evaluadas se aceptaron 30 y se rechazaron
+18 por formar ciclo; las 3 últimas ni se miran porque el árbol ya está completo.
 
-Comparación con la salida real: el endpoint devuelve exactamente estas 11 calles, en este orden
-(CUN-MON, HIT-PCE, PMA-RET, ABA-HIT, OBE-PMA, REC-RET, HIT-PAL, ABA-OBE, CON-LBO, CON-PMA,
-MON-PAL) con `costoTotal` 287.0. Lo verifica `ArbolRecubrimientoTest.kruskalDominio`.
+Lecturas:
+- **La calle de la relajación (HGA – LBO, 51) no entra al árbol:** cuando se evalúa (fila 46) HGA y
+  LBO ya están unidos por HGA – CON – LBO (15 + 32). Es la misma razón por la que Dijkstra no la usa.
+- **Filas 40 y 48:** recién con MON – SAA se une el bloque del oeste {AGR, DEV, SAA, VUR} al resto
+  (29 lugares), y la última calle aceptada, DEV – VEL (58), une el bloque {MAT, VEL} (que se había
+  formado en la fila 44) con todo lo demás.
+- **El MST es único:** cada calle rechazada cuesta **estrictamente más** que todas las del ciclo que
+  cerraría (columna "máx."), por ejemplo BEL – SAA = 44 contra un máximo de 43 en BEL – MON – SAA.
+  Lo mismo vale para las 3 no evaluadas: el ciclo de AEP – BEL en el árbol final tiene máximo 40 y
+  los de FLO – MAT y FLO – VEL pasan por DEV – VEL (58), todos menores que 59, 73 y 79. Por eso los
+  empates de costo (15, 18, 20, 23, 27, 36, 43…) no cambian el resultado.
 
-Los empates (tres calles de 18, dos de 20, tres de 30) no cambian el resultado: el MST de este
-grafo es único (cada calle rechazada es estrictamente más cara que todas las del ciclo que
-cerraría, por ejemplo ABA – REC = 29 contra un máximo de 28 en ABA – OBE – PMA – RET – REC).
+Comparación con la salida real: el endpoint devuelve exactamente estas 30 calles, en el orden de
+aceptación de la tabla, con `costoTotal` 835.0. Lo verifica `ArbolRecubrimientoTest.kruskalDominio`
+(y `kruskalAgregaEnOrdenCrecienteDeCosto`, que los costos aparezcan en orden no decreciente).
 
 ---
 
@@ -164,43 +259,68 @@ el árbol se descartan al extraerlas (eliminación perezosa).
 
 | Paso | Entra | Por la calle | key | Total | Actualizaciones de key (v: antes → después) | Entradas viejas descartadas antes de este paso |
 |---|---|---|---|---|---|---|
-| 1 | RET | — (origen) | 0 | 0 | OBE ∞→22, PAL ∞→45, PMA ∞→18, REC ∞→20 | — |
-| 2 | PMA | RET – PMA | 18 | 18 | OBE 22→20, CON ∞→30, LBO ∞→36 | — |
-| 3 | REC | RET – REC | 20 | 38 | ABA ∞→29, PAL 45→30 | — |
-| 4 | OBE | PMA – OBE | 20 | 58 | ABA 29→28 (CON 31 no mejora 30) | — |
-| 5 | ABA | OBE – ABA | 28 | 86 | HIT ∞→19, PCE ∞→30 (CON 36 no mejora 30) | (OBE, 22) |
-| 6 | HIT | ABA – HIT | 19 | 105 | PAL 30→21, PCE 30→18 | — |
-| 7 | PCE | HIT – PCE | 18 | 123 | — | — |
-| 8 | PAL | HIT – PAL | 21 | 144 | CUN ∞→90, MON ∞→66 | — |
-| 9 | CON | PMA – CON | 30 | 174 | LBO 36→29 | (ABA, 29) |
-| 10 | LBO | CON – LBO | 29 | 203 | — | — |
-| 11 | MON | PAL – MON | 66 | 269 | CUN 90→18 | (PAL, 30), (PCE, 30), (LBO, 36), (PAL, 45) |
-| 12 | CUN | MON – CUN | 18 | **287** | — | — |
-| — | | | | | | (CUN, 90): la cola queda vacía |
+| 1 | RET | — (origen) | 0 | 0 | OBE ∞→23, PMA ∞→36, REC ∞→26 | — |
+| 2 | OBE | RET – OBE | 23 | 23 | CGR ∞→18, CON ∞→40, PMA 36→28 (REC 31 no mejora 26) | — |
+| 3 | CGR | OBE – CGR | 18 | 41 | ABA ∞→27, CON 40→33 | — |
+| 4 | REC | RET – REC | 26 | 67 | PAL ∞→40 (ABA 36 no mejora 27) | — |
+| 5 | ABA | CGR – ABA | 27 | 94 | BOE ∞→36, HIT ∞→15 | — |
+| 6 | HIT | ABA – HIT | 15 | 109 | PCE ∞→20 (PAL 43 no mejora 40) | — |
+| 7 | PCE | HIT – PCE | 20 | 129 | CAB ∞→20, CHA ∞→37 | — |
+| 8 | CAB | PCE – CAB | 20 | 149 | BOE 36→27, FLO ∞→43, PCH ∞→29 | — |
+| 9 | BOE | CAB – BOE | 27 | 176 | HGA ∞→36 (PCH 35 no mejora 29) | — |
+| 10 | PMA | OBE – PMA | 28 | 204 | RES ∞→15, SAN ∞→20 | — |
+| 11 | RES | PMA – RES | 15 | 219 | — | — |
+| 12 | SAN | PMA – SAN | 20 | 239 | CON 33→18, LBO ∞→34 | — |
+| 13 | CON | SAN – CON | 18 | 257 | HGA 36→15, LBO 34→32 | — |
+| 14 | HGA | CON – HGA | 15 | 272 | — (LBO 51 no mejora 32) | — |
+| 15 | PCH | CAB – PCH | 29 | 301 | FLO 43→36 | — |
+| 16 | LBO | CON – LBO | 32 | 333 | — | — |
+| 17 | FLO | PCH – FLO | 36 | 369 | MAT ∞→73, VEL ∞→79 | (CON, 33), (LBO, 34), (PMA, 36), (BOE, 36) |
+| 18 | CHA | PCE – CHA | 37 | 406 | AGR ∞→45, COL ∞→19 (PAL 43 no mejora 40) | (HGA, 36) |
+| 19 | COL | CHA – COL | 19 | 425 | BEL ∞→27, PLA ∞→50, VUR ∞→56 | — |
+| 20 | BEL | COL – BEL | 27 | 452 | AEP ∞→59, MON ∞→24, SAA ∞→44 | — |
+| 21 | MON | BEL – MON | 24 | 476 | CUN ∞→20, SAA 44→43 | — |
+| 22 | CUN | MON – CUN | 20 | 496 | AEP 59→44 | — |
+| 23 | PAL | REC – PAL | 40 | 536 | PLA 50→23 | (CON, 40) |
+| 24 | PLA | PAL – PLA | 23 | 559 | AEP 44→21 | — |
+| 25 | AEP | PLA – AEP | 21 | 580 | — | — |
+| 26 | SAA | MON – SAA | 43 | 623 | VUR 56→35 | (FLO, 43) |
+| 27 | VUR | SAA – VUR | 35 | 658 | AGR 45→31 | — |
+| 28 | AGR | VUR – AGR | 31 | 689 | DEV ∞→43 | — |
+| 29 | DEV | AGR – DEV | 43 | 732 | VEL 79→58 | — |
+| 30 | VEL | DEV – VEL | 58 | 790 | MAT 73→45 | (SAA, 44), (AEP, 44), (AGR, 45), (PLA, 50), (VUR, 56) |
+| 31 | MAT | VEL – MAT | 45 | **835** | — | — |
+| — | | | | | | (AEP, 59), (MAT, 73), (VEL, 79): la cola queda vacía |
 
-**Resultado: 11 aristas, 287 minutos.** Orden en que entran los vértices: RET, PMA, REC, OBE, ABA,
-HIT, PCE, PAL, CON, LBO, MON, CUN.
+**Resultado: 30 aristas, 835 minutos.** Orden en que entran los 30 vértices después de RET: OBE,
+CGR, REC, ABA, HIT, PCE, CAB, BOE, PMA, RES, SAN, CON, HGA, PCH, LBO, FLO, CHA, COL, BEL, MON, CUN,
+PAL, PLA, AEP, SAA, VUR, AGR, DEV, VEL, MAT.
 
 Observaciones:
-- **Paso 3, empate:** REC (key 20 por RET – REC) y OBE (key 20 por PMA – OBE) empatan. Cualquiera
-  de los dos órdenes es correcto y lleva al mismo árbol; la `PriorityQueue` extrajo primero REC,
-  igual que en la salida real.
-- **Prim no es "el vecino más cercano del último que entró":** en el paso 5 entra ABA (28) aunque
-  el último en entrar fue OBE, y en el paso 9 entra CON colgando de PMA (que entró en el paso 2).
-  Siempre se toma la calle más barata que cruza del árbol al resto, salga de donde salga.
-- **Paso 3, actualización PAL 45 → 30:** por la key, PAL deja de depender de RET – PAL (45) y
-  después, en el paso 6, baja a 21 por HIT – PAL. Por eso RET – PAL no queda en el árbol.
-- Conteo de la cola: 19 inserciones (origen + 18 actualizaciones) = 12 vértices que entran + 7
+- **Prim no es "el vecino más cercano del último que entró":** en el paso 4 entra REC colgando de
+  RET (que entró en el paso 1), en el paso 10 entra PMA colgando de OBE (paso 2) y en el paso 23 entra
+  PAL colgando de REC (paso 4). Siempre se toma la calle más barata que cruza del árbol al resto,
+  salga de donde salga.
+- **Constitución cambia de padre tres veces:** key[CON] = 40 por OBE (paso 2), 33 por CGR (paso 3) y
+  18 por SAN (paso 12). Entra en el paso 13 por SAN – CON; ni OBE – CON ni CGR – CON quedan en el
+  árbol (Kruskal también las rechaza: filas 34 y 24).
+- **PMA 36 → 28 en el paso 2:** la calle RET – PMA (36) nunca entra al árbol; PMA queda colgando de
+  OBE.
+- **El oeste entra al final:** el bloque SAA, VUR, AGR, DEV, VEL, MAT se conecta recién desde el
+  paso 26, porque las calles que lo unen al resto (MON – SAA 43, COL – VUR 56, AGR – CHA 45,
+  FLO – VEL 79…) son de las más caras. VEL entra por DEV – VEL (58) y no por FLO – VEL (79): en el
+  paso 29 key[VEL] baja de 79 a 58.
+- Conteo de la cola: 46 inserciones (origen + 45 actualizaciones) = 31 vértices que entran + 15
   entradas viejas descartadas.
 
-Comparación con la salida real: el endpoint devuelve las aristas en este mismo orden (RET→PMA,
-RET→REC, PMA→OBE, OBE→ABA, ABA→HIT, HIT→PCE, HIT→PAL, PMA→CON, CON→LBO, PAL→MON, MON→CUN) con
-`costoTotal` 287.0. Lo verifica `ArbolRecubrimientoTest.primDominioDesdeRetiro`.
+Comparación con la salida real: el endpoint devuelve las aristas en este mismo orden (RET→OBE,
+OBE→CGR, RET→REC, CGR→ABA, …, DEV→VEL, VEL→MAT) con `costoTotal` 835.0. Lo verifica
+`ArbolRecubrimientoTest.primDominioDesdeRetiro`.
 
-**Prim y Kruskal dan el mismo árbol:** las 11 calles de la tabla de Prim son las mismas 11 que
+**Prim y Kruskal dan el mismo árbol:** las 30 calles de la tabla de Prim son las mismas 30 que
 aceptó Kruskal (en otro orden), como corresponde a un MST único. El test
-`primDominioDaElMismoArbolDesdeOtroOrigen` comprueba además que arrancando desde CUN se obtiene el
-mismo conjunto de calles.
+`primDominioDaElMismoArbolDesdeOtroOrigen` comprueba además que arrancando desde otro origen se
+obtiene el mismo conjunto de calles.
 
 ---
 
@@ -373,69 +493,92 @@ Consultas: `GET /api/grafo/floyd`, `/floyd/camino` y `/floyd/comparacion`.
 
 ### 5.1 Matriz de tiempos mínimos (minutos a pie)
 
-Fila = origen, columna = destino. Simétrica porque el grafo es no dirigido; diagonal en 0.
+La matriz completa es de 31 × 31 = 961 celdas; acá va un extracto de 8 lugares (los de las trazas
+de este documento). Fila = origen, columna = destino. Simétrica porque el grafo es no dirigido;
+diagonal en 0.
 
-| | ABA | CON | CUN | HIT | LBO | MON | OBE | PAL | PCE | PMA | REC | RET |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| **ABA** | 0 | 36 | 124 | 19 | 65 | 106 | 28 | 40 | 30 | 48 | 29 | 49 |
-| **CON** | 36 | 0 | 160 | 55 | 29 | 142 | 31 | 76 | 66 | 30 | 56 | 48 |
-| **CUN** | 124 | 160 | 0 | 105 | 183 | 18 | 139 | 84 | 123 | 147 | 114 | 129 |
-| **HIT** | 19 | 55 | 105 | 0 | 84 | 87 | 47 | 21 | 18 | 67 | 48 | 66 |
-| **LBO** | 65 | 29 | 183 | 84 | 0 | 165 | 56 | 99 | 95 | 36 | 74 | 54 |
-| **MON** | 106 | 142 | 18 | 87 | 165 | 0 | 121 | 66 | 105 | 129 | 96 | 111 |
-| **OBE** | 28 | 31 | 139 | 47 | 56 | 121 | 0 | 55 | 58 | 20 | 25 | 22 |
-| **PAL** | 40 | 76 | 84 | 21 | 99 | 66 | 55 | 0 | 39 | 63 | 30 | 45 |
-| **PCE** | 30 | 66 | 123 | 18 | 95 | 105 | 58 | 39 | 0 | 78 | 59 | 79 |
-| **PMA** | 48 | 30 | 147 | 67 | 36 | 129 | 20 | 63 | 78 | 0 | 38 | 18 |
-| **REC** | 29 | 56 | 114 | 48 | 74 | 96 | 25 | 30 | 59 | 38 | 0 | 20 |
-| **RET** | 49 | 48 | 129 | 66 | 54 | 111 | 22 | 45 | 79 | 18 | 20 | 0 |
+| | RET | OBE | CON | HGA | LBO | HIT | PAL | CUN |
+|---|---|---|---|---|---|---|---|---|
+| **RET** | 0 | 23 | 63 | 78 | 90 | 77 | 66 | 154 |
+| **OBE** | 23 | 0 | 40 | 55 | 72 | 60 | 71 | 159 |
+| **CON** | 63 | 40 | 0 | 15 | 32 | 75 | 111 | 199 |
+| **HGA** | 78 | 55 | 15 | 0 | 47 | 87 | 126 | 210 |
+| **LBO** | 90 | 72 | 32 | 47 | 0 | 107 | 143 | 231 |
+| **HIT** | 77 | 60 | 75 | 87 | 107 | 0 | 43 | 131 |
+| **PAL** | 66 | 71 | 111 | 126 | 143 | 43 | 0 | 88 |
+| **CUN** | 154 | 159 | 199 | 210 | 231 | 131 | 88 | 0 |
 
-Suma de las 144 celdas: **9206**, igual que `FloydWarshallTest.sumaDeTodasLasDistancias`. La salida
-real de `/floyd` coincide en los pares consultados (`ABA->ABA` 0, `ABA->CON` 36, `ABA->CUN` 124,
-`PAL->CUN` 84, `RET->CUN` 129, `LBO->CUN` 183).
+`/floyd` devuelve los **961 pares** (el grafo es conexo, no falta ninguno) y la suma de todas las
+celdas es **111730**, igual que `FloydWarshallTest.dominioTieneTodosLosParesYDiagonalCero` y
+`FloydWarshallTest.sumaDeTodasLasDistancias`. El par más lejano es MAT → CUN = **263** (diámetro
+del grafo).
+
+Notar que la matriz de adyacencia de entrada tiene HGA – LBO = 51 (la calle directa,
+`MatrizDominioTest.guardaElCostoDirectoAunqueNoSeaElMinimo`), y en la de salida la celda vale 47.
 
 ### 5.2 Comparación con Dijkstra (algunos pares)
 
 | Par | Floyd | Dijkstra (camino) | Coincide |
 |---|---|---|---|
-| PAL → CUN | 84 | PAL – MON – CUN = 66 + 18 (no la directa de 90) | Sí |
-| RET → CUN | 129 | RET – PAL – MON – CUN = 45 + 66 + 18 | Sí |
-| LBO → CUN | 183 | LBO – PMA – RET – PAL – MON – CUN = 36 + 18 + 45 + 66 + 18 | Sí |
-| LBO → MON / MON → LBO | 165 / 165 | simétrico (no dirigido) | Sí |
-| CON → PCE | 66 | CON – ABA – PCE = 36 + 30 | Sí |
-| PCE → PMA | 78 | PCE – ABA – OBE – PMA = 30 + 28 + 20 | Sí |
+| HGA → LBO | 47 | HGA – CON – LBO = 15 + 32 (no la directa de 51) | Sí |
+| RET → CUN | 154 | RET – REC – PAL – PLA – AEP – CUN = 26 + 40 + 23 + 21 + 44 | Sí |
+| PAL → CUN | 88 | PAL – PLA – AEP – CUN = 23 + 21 + 44 | Sí |
+| OBE → HIT | 60 | OBE – CGR – ABA – HIT = 18 + 27 + 15 | Sí |
+| LBO → HIT | 107 | LBO – CON – CGR – ABA – HIT = 32 + 33 + 27 + 15 | Sí |
+| CON → PCE | 95 | CON – CGR – ABA – HIT – PCE = 33 + 27 + 15 + 20 | Sí |
+| PCE → PMA | 108 | PCE – HIT – ABA – CGR – OBE – PMA = 20 + 15 + 27 + 18 + 28 | Sí |
+| LBO → VEL | 232 | LBO – CON – HGA – BOE – CAB – FLO – VEL = 32 + 15 + 36 + 27 + 43 + 79 | Sí |
+| MAT → CUN / CUN → MAT | 263 / 263 | MAT – FLO – CAB – PCE – CHA – COL – BEL – MON – CUN = 73 + 43 + 20 + 37 + 19 + 27 + 24 + 20; simétrico | Sí |
 
-La fila **PAL** de la matriz es exactamente la última fila de la tabla de Dijkstra desde PAL de la
-[sección 1](#1-dijkstra-desde-pal) (HIT 21, REC 30, PCE 39, ABA 40, RET 45, OBE 55, PMA 63, MON 66,
-CON 76, CUN 84, LBO 99).
+La fila **HGA** del extracto es la misma que la tabla de Dijkstra desde HGA de la
+[sección 1](#1-dijkstra-desde-hga) (CON 15, HGA 0, LBO 47, OBE 55, RET 78, HIT 87, PAL 126,
+CUN 210).
 
-Para los **144 pares**, `FloydWarshallTest.coincideConDijkstraEnTodosLosPares` compara los costos y
+Para los **961 pares**, `FloydWarshallTest.coincideConDijkstraEnTodosLosPares` compara los costos y
 `caminoFloydIgualADijkstraEnTodosLosPares` compara además los vértices del camino reconstruido por
-`/floyd/camino` (en el dominio no hay caminos mínimos empatados). Salidas reales de `/floyd/camino`:
-PAL → CUN `["PAL","MON","CUN"]` 84.0 y LBO → CUN `["LBO","PMA","RET","PAL","MON","CUN"]` 183.0,
+`/floyd/camino` (en el dominio ningún par tiene dos caminos mínimos empatados, así que los dos
+algoritmos tienen que dar exactamente el mismo camino). Salidas reales de `/floyd/camino`:
+HGA → LBO `["HGA","CON","LBO"]` 47.0 y RET → CUN `["RET","REC","PAL","PLA","AEP","CUN"]` 154.0,
 iguales a las de `/dijkstra`.
 
-**Cómo llega Floyd a PAL → CUN = 84** (el orden de k es el de los índices: ABA, CON, CUN, HIT, LBO,
-MON, …): al empezar d[PAL][CUN] = 90 (calle directa) y siguiente[PAL][CUN] = CUN. Ningún intermedio
-anterior a MON mejora ese par. Con k = MON: d[PAL][MON] + d[MON][CUN] = 66 + 18 = 84 < 90, entonces
-d[PAL][CUN] = 84 y siguiente[PAL][CUN] = siguiente[PAL][MON] = MON. Reconstrucción: PAL →
-siguiente[PAL][CUN] = MON → siguiente[MON][CUN] = CUN.
+**Cómo llega Floyd a HGA → LBO = 47.** El orden de k es el de los índices (orden alfabético de
+ids): ABA, AEP, AGR, BEL, BOE, CAB, CGR, CHA, COL, **CON** (k = 9), CUN, …
+- Al empezar, d[HGA][LBO] = 51 (calle directa) y siguiente[HGA][LBO] = LBO.
+- Con k = ABA … COL no mejora: a LBO solo se llega desde CON, HGA o SAN, y ni CON ni SAN están
+  todavía habilitados como intermedios.
+- Con k = CON: d[HGA][CON] + d[CON][LBO] = 15 + 32 = 47 < 51, entonces d[HGA][LBO] = 47 y
+  siguiente[HGA][LBO] = siguiente[HGA][CON] = CON.
+- Ningún k posterior baja de 47 (es el mínimo real).
+
+Reconstrucción: HGA → siguiente[HGA][LBO] = CON → siguiente[CON][LBO] = LBO.
 
 ### 5.3 Trabajo: Floyd vs. Dijkstra V veces
 
 ```
 GET /api/grafo/floyd/comparacion
-{"vertices":12,"operacionesFloyd":1728,"nodosExpandidosDijkstra":144,"aristasExaminadasDijkstra":504}
+{"vertices":31,"operacionesFloyd":29791,"nodosExpandidosDijkstra":961,"aristasExaminadasDijkstra":3162}
 ```
 
 | Métrica | Cálculo a mano | Valor |
 |---|---|---|
-| Relajaciones de Floyd | V³ = 12³ | 1728 |
-| Nodos expandidos por Dijkstra (12 corridas) | V corridas × V nodos (grafo conexo) | 144 |
-| Aristas examinadas por Dijkstra (12 corridas) | V corridas × 2E = 12 × 42 | 504 |
+| Comparaciones de Floyd (triple bucle) | V³ = 31³ | 29791 |
+| Nodos expandidos por Dijkstra (31 corridas) | V corridas × V nodos (grafo conexo: cada corrida saca a todos) | 961 |
+| Aristas examinadas por Dijkstra (31 corridas) | V corridas × 2E entradas de adyacencia = 31 × 102 | 3162 |
 
-El análisis (grafo disperso vs. denso) está en la ficha de
+Lo verifica `FloydWarshallTest.comparacionConDijkstraEnElDominio`.
+
+Lectura: Floyd hace 29791 comparaciones sin importar cuántas calles haya (depende solo de V).
+Dijkstra corrido desde los 31 lugares mira 3162 entradas de adyacencia, unas 9 veces menos, y a
+eso se suma el costo del heap: en las 31 corridas hay 1071 inserciones y 1071 extracciones (961
+válidas + 110 entradas viejas), con una cola que nunca pasa de 14 elementos (≈ 4 niveles de heap).
+Aun contando eso, Dijkstra V veces queda por debajo de Floyd porque el grafo es **ralo**: E = 51
+contra 31 · 30 / 2 = 465 calles posibles (≈ 11 %), y el orden V · (V + E) log V crece mucho más
+lento que V³ mientras E esté lejos de V². Floyd conviene en grafos densos o cuando hay aristas
+negativas (que Dijkstra no admite). Análisis completo en la ficha de
 [`/floyd/comparacion`](ENDPOINTS.md#get-apigrafofloydcomparacion).
+
+(Los conteos del heap salen de la misma copia instrumentada de `arbolDesde`; el endpoint no los
+devuelve.)
 
 ### 5.4 Ciclo negativo (tests)
 
@@ -478,33 +621,88 @@ solo se respeta el camino simple y el filtro se aplica recién al llegar al dest
 | Semilla cátedra, no dirigida | A → H | 25 / 10 | 6 | 37 | 78 | 53 % |
 | Semilla cátedra, no dirigida | A → H | 25 / 5 | 5 | 36 | 78 | 54 % |
 | Semilla cátedra, no dirigida | A → H | 25 / 4 | 2 | 30 | 78 | 62 % |
-| Dominio CABA | RET → CUN | 150 / 4 | 4 | 118 | 684 | 83 % |
-| Dominio CABA | RET → CUN | 130 / 5 | 1 | 144 | 684 | 79 % |
-| Dominio CABA | CON → PCE | 90 / 4 | 3 | 42 | 684 | 94 % |
-| Dominio CABA | OBE → HIT | 80 / 3 | 4 | 34 | 333 | 90 % |
-| Dominio CABA | RET → CUN | 110 / 3 | 0 | 47 | 684 | 93 % |
-| Dominio CABA | RET → CUN | 1000 / 10 | 110 | 682 | 684 | 0,3 % |
+| Dominio CABA | HGA → LBO | 60 / 3 | 2 | 9 | 489.963 | 99,998 % |
+| Dominio CABA | OBE → HIT | 80 / 3 | 1 | 27 | 367.114 | 99,993 % |
+| Dominio CABA | CON → PCE | 120 / 5 | 3 | 72 | 358.249 | 99,98 % |
+| Dominio CABA | LBO → HIT | 140 / 5 | 5 | 106 | 522.659 | 99,98 % |
+| Dominio CABA | RET → CUN | 150 / 5 | 0 | 153 | 807.257 | 99,98 % |
+| Dominio CABA | RET → CUN | 180 / 6 | 1 | 305 | 807.257 | 99,96 % |
+| Dominio CABA | RET → CUN | **200 / 8 (defaults del endpoint)** | 3 | 542 | 807.257 | 99,93 % |
+| Dominio CABA | RET → CUN | 1000 / 10 | 145 | 6.018 | 807.257 | 99,25 % |
 
-Todos los valores los verifica `BacktrackingTest`; el caso RET → CUN 150 / 4 coincide con la salida
-real del endpoint.
+Ahorro = 1 − con poda / sin poda. Todas las filas las verifica `BacktrackingTest` salvo
+CON → PCE, que sale de la app (`GET /api/grafo/rutas?origen=CON&destino=PCE&costoMaximo=120&saltosMaximos=5`)
+y de la copia instrumentada. Rutas de los casos chicos:
+- HGA → LBO (60 / 3): HGA – CON – LBO 47 y HGA – LBO 51 (traza en 6.2).
+- CON → PCE (120 / 5): CON – CGR – ABA – HIT – PCE 95, CON – HGA – BOE – CAB – PCE 98 y
+  CON – OBE – CGR – ABA – HIT – PCE 120 (exactamente en el límite: la condición es `≤`).
+- RET → CUN (200 / 8), en el orden en que las encuentra: RET – OBE – REC – PAL – PLA – AEP – CUN 182,
+  RET – REC – PAL – CHA – COL – BEL – MON – CUN 199 y RET – REC – PAL – PLA – AEP – CUN 154.
+- LBO → HIT (140 / 5): 107, 134, 132, 138 y 127 minutos (detalle en `BacktrackingTest`).
 
 Lectura:
 - **Con y sin poda devuelven las mismas rutas** (lo verifica `conYSinPodaDevuelvenLasMismasRutas`):
   con costos ≥ 0 el costo acumulado nunca baja y los tramos solo suben, así que una rama podada no
   podía terminar en una ruta válida.
-- **Sin poda la cantidad no depende de los límites**: para RET → CUN siempre son 684 nodos (todos
-  los caminos simples que salen de RET sin atravesar CUN, más los que terminan en CUN). Para
-  OBE → HIT son 333.
-- **Cuanto más ajustados los límites, más poda.** Con 1000 / 10 casi no se ahorra: el camino simple
-  más largo de RET a CUN tarda 327 minutos, así que el límite de costo nunca corta, y el de 10 tramos
-  solo corta los 2 caminos de 11 tramos que pasan por los 12 lugares (684 − 2 = 682).
-- Con 130 / 5 se exploran **más** nodos que con 150 / 4 (144 contra 118) aunque el tiempo máximo sea
-  menor: el límite de tramos más holgado deja bajar un nivel más en muchas ramas.
-- En la semilla no dirigida aparecen caminos como A – C – B – D – …, que no existen en la dirigida:
-  el árbol sin poda crece de 38 a 78 nodos, aunque las rutas válidas sean las mismas 6 (todas las
-  nuevas superan 25 minutos).
+- **Sin poda la cantidad no depende de los límites**: para RET → CUN siempre son 807.257 nodos
+  (todos los caminos simples que salen de RET sin atravesar CUN, más los que terminan en CUN),
+  pidas 150 / 5 o 1000 / 10. Con 31 lugares y 51 calles esa enumeración ya es enorme; por eso el
+  ahorro de la poda es de más del 99 % en todos los casos del dominio.
+- **Cuanto más holgados los límites, más nodos con poda:** RET → CUN pasa de 153 (150 / 5) a 305
+  (180 / 6), 542 (200 / 8) y 6.018 (1000 / 10). Con 1000 / 10 el límite de costo nunca corta
+  (10 tramos × 79, la calle más cara, = 790 < 1000): toda la poda viene del límite de 10 tramos.
+- **Sin rutas no significa sin trabajo:** con 150 / 5 no hay ninguna ruta (la más rápida tarda 154),
+  pero igual se exploran 153 nodos hasta comprobarlo.
 
-### 6.2 Traza a mano: semilla de la cátedra dirigida, A → H, costoMaximo = 25, saltosMaximos = 10
+### 6.2 Traza a mano: HGA → LBO, costoMaximo = 60, saltosMaximos = 3
+
+Vecinos en el orden de la lista de adyacencia (tabla del encabezado): HGA: BOE 36, CON 15, LBO 51;
+CON: CGR 33, HGA 15, LBO 32, OBE 40, SAN 18; SAN: CON 18, LBO 34, PMA 20.
+
+Cada línea numerada es un nodo explorado (`#n`) con el costo acumulado y los tramos entre
+paréntesis; `✂` es un hijo que **no se abre** porque `costo + calle > 60` o `tramos + 1 > 3`. Los
+vecinos ya visitados (camino simple) no se listan.
+
+```
+#1  HGA (0, 0)
+#2  ├─ BOE (36, 1)
+    │  ├─ ✂ ABA: 36 + 36 = 72
+    │  ├─ ✂ CAB: 36 + 27 = 63
+    │  └─ ✂ PCH: 36 + 35 = 71
+#3  ├─ CON (15, 1)
+#4  │  ├─ CGR (48, 2)
+    │  │  ├─ ✂ ABA: 48 + 27 = 75
+    │  │  └─ ✂ OBE: 48 + 18 = 66
+#5  │  ├─ LBO (47, 2)                 RUTA HGA-CON-LBO = 47
+#6  │  ├─ OBE (55, 2)
+    │  │  ├─ ✂ CGR: 55 + 18 = 73
+    │  │  ├─ ✂ PMA: 55 + 28 = 83
+    │  │  ├─ ✂ REC: 55 + 31 = 86
+    │  │  └─ ✂ RET: 55 + 23 = 78
+#7  │  └─ SAN (33, 2)
+    │     ├─ ✂ LBO: 33 + 34 = 67
+#8  │     └─ PMA (53, 3)
+    │        ├─ ✂ OBE: 53 + 28 = 81 y 4 tramos
+    │        ├─ ✂ RES: 53 + 15 = 68 y 4 tramos
+    │        └─ ✂ RET: 53 + 36 = 89 y 4 tramos
+#9  └─ LBO (51, 1)                    RUTA HGA-LBO = 51
+```
+
+**Con poda: 9 nodos y 2 rutas**, en el mismo orden que devuelve el algoritmo (test
+`garrahanLaBocaDevuelveElAtajoYLaCalleDirecta`): primero HGA – CON – LBO (47) y después la calle
+directa HGA – LBO (51), porque CON aparece antes que LBO en la lista de HGA. Se podaron 13 hijos.
+
+**Sin poda: 489.963 nodos.** Cada uno de esos 13 hijos se habría abierto, y debajo de cada uno se
+enumeran todos los caminos simples que siguen desde ahí, sin ningún límite. Ninguno da una ruta válida: o llegan a LBO con más de 60 minutos o con más de 3 tramos, o no
+llegan. Por eso las dos corridas devuelven las mismas 2 rutas.
+
+**Retroceso:** al volver de #5 se desmarca LBO, y al volver de #3 (después de #4, #6, #7 y #8) se
+desmarca CON. Por eso LBO se puede volver a visitar en #9 por otro camino (la calle directa). Si
+quedaran marcados, como en un DFS, la segunda ruta no aparecería.
+
+### 6.3 Traza a mano: semilla de la cátedra dirigida, A → H, costoMaximo = 25, saltosMaximos = 10
+
+Caso de la clase, sobre un grafo chico donde también se puede enumerar a mano la corrida sin poda.
 
 Aristas (en el orden de las listas de adyacencia): A → B 4, A → C 9, B → C 3, B → D 7, C → D 2,
 C → E 11, D → E 5, D → F 8, E → F 6, E → G 10, F → H 3, G → H 4.
@@ -692,55 +890,73 @@ Endpoint [`/api/grafo/ucs`](ENDPOINTS.md#get-apigrafoucs), test `UcsTest`. Mismo
 Dijkstra (sección 1), pero **termina cuando el destino sale de la cola**. **Nodo expandido** =
 extracción válida de la cola (las entradas viejas descartadas no cuentan; el destino sí).
 
-### 8.1 Traza a mano: LBO → HIT
+### 8.1 Traza a mano: RET → PMA
 
-Inicialización: dist[LBO] = 0, el resto ∞; cola = {(LBO, 0)}. Los vecinos se miran en el orden de
-la lista de adyacencia (tabla en [ENDPOINTS.md](ENDPOINTS.md#carga-del-grafo-común-a-todos-los-endpoints-de-apigrafo)).
+Inicialización: dist[RET] = 0, el resto ∞; cola = {(RET, 0)}. Vecinos en el orden de la lista de
+adyacencia (tabla del encabezado).
 
 | Expandido | Se extrae (g) | Relajaciones exitosas | Relajaciones que no mejoran |
 |---|---|---|---|
-| 1 | LBO (0) | CON 0+29=29, PMA 0+36=36 | — |
-| 2 | CON (29) | ABA 29+36=65, OBE 29+31=60 | PMA 29+30=59 ≥ 36 |
-| 3 | PMA (36) | **OBE 36+20=56 < 60** (se reencola), RET 36+18=54 | — |
-| 4 | RET (54) | PAL 54+45=99, REC 54+20=74 | OBE 54+22=76 ≥ 56 |
-| 5 | OBE (56) | — | ABA 56+28=84 ≥ 65; REC 56+25=81 ≥ 74 |
-| — | (OBE, 60) | entrada vieja: 60 > dist[OBE] = 56, **se descarta** (no cuenta) | |
-| 6 | ABA (65) | HIT 65+19=84, PCE 65+30=95 | REC 65+29=94 ≥ 74 |
-| 7 | REC (74) | — | PAL 74+30=104 ≥ 99 |
-| 8 | **HIT (84)** | **es el destino: fin** (no se miran sus vecinos) | |
+| 1 | RET (0) | OBE 0+23=23, **PMA 0+36=36**, REC 0+26=26 | — |
+| 2 | OBE (23) | CGR 23+18=41, CON 23+40=63 | PMA 23+28=51 ≥ 36; REC 23+31=54 ≥ 26 |
+| 3 | REC (26) | ABA 26+36=62, PAL 26+40=66 | — |
+| 4 | **PMA (36)** | **es el destino: fin** (no se miran sus vecinos) | |
 
 (Se omiten los vecinos ya procesados, que nunca mejoran con costos ≥ 0.)
 
-Al cortar quedan en la cola PCE (95) y PAL (99) sin expandir; MON y CUN ni siquiera se
-descubrieron (dist = ∞). Camino por `previo[]`: HIT ← ABA ← CON ← LBO, es decir
-**LBO → CON → ABA → HIT = 29 + 36 + 19 = 84**. Cola: 11 inserciones y 9 extracciones
-(8 válidas + 1 descartada); Dijkstra completo habría seguido con PCE, PAL, MON y CUN.
+PMA se **descubre** en el primer paso (calle directa RET – PMA, 36), pero no se puede cortar ahí:
+en la cola todavía hay lugares más cercanos (OBE 23, REC 26) por los que podría existir un camino
+más barato. Recién cuando PMA **sale** de la cola todo lo que queda cuesta 36 o más, y como los
+costos son ≥ 0 ya nada puede mejorarlo. En este caso OBE ofrece 51, que no mejora.
 
-Notar que HIT se **descubre** en el paso 6 con 84 y recién se **saca** en el paso 8: en este caso
-el valor no cambió en el medio, pero en PAL → CUN sí (se descubre con 90 por la calle directa y
-sale con 84 por MON, ver sección 1). Por eso UCS corta al sacar y no al descubrir.
+Al cortar quedan en la cola CGR (41), ABA (62), CON (63) y PAL (66) sin expandir, y los otros 23
+lugares ni siquiera se descubrieron (dist = ∞). Camino por `previo[]`: PMA ← RET, es decir
+**RET → PMA = 36**. Cola: 8 inserciones y 4 extracciones; Dijkstra completo habría expandido los 31.
 
-Salida real, coincide con la traza:
+**HGA → LBO es el caso donde el valor cambia entre que se descubre y que se saca:** son los
+primeros 5 pasos de la [sección 1](#1-dijkstra-desde-hga). LBO se descubre con 51 por la calle
+directa (expandido 1), baja a 47 por CON (expandido 2) y sale con 47 en el expandido 5, después de
+SAN (33) y BOE (36). Si UCS cortara al descubrir, devolvería 51. Por eso corta al sacar.
+
+Salidas reales, coinciden con las trazas:
 
 ```
-GET /api/grafo/ucs?origen=LBO&destino=HIT
-{"vertices":["LBO","CON","ABA","HIT"],"costoTotal":84.0,"nodosExpandidosUcs":8,"nodosExpandidosDijkstra":12}
+GET /api/grafo/ucs?origen=RET&destino=PMA
+{"vertices":["RET","PMA"],"costoTotal":36.0,"nodosExpandidosUcs":4,"nodosExpandidosDijkstra":31}
+
+GET /api/grafo/ucs?origen=HGA&destino=LBO
+{"vertices":["HGA","CON","LBO"],"costoTotal":47.0,"nodosExpandidosUcs":5,"nodosExpandidosDijkstra":31}
 ```
 
 ### 8.2 Nodos expandidos: UCS vs. Dijkstra
 
-| Consulta | Camino | Costo (min) | UCS | Dijkstra | Por qué |
+Regla para calcularlo a mano: UCS expande los lugares que están **más cerca del origen que el
+destino**, más el destino. Por ejemplo RET → PMA: RET 0, OBE 23 y REC 26 están a menos de 36, más
+PMA = 4; HGA → LBO: HGA 0, CON 15, SAN 33 y BOE 36 están a menos de 47, más LBO = 5 (ver la columna
+dist de la sección 1). Si otro lugar empata en distancia con el destino, depende de cuál saque
+primero la cola.
+
+| Consulta | Camino | Costo (min) | UCS | Dijkstra | Comentario |
 |---|---|---|---|---|---|
-| LBO → HIT | LBO, CON, ABA, HIT | 84 | **8** | 12 | Traza 8.1. |
-| PAL → CUN | PAL, MON, CUN | 84 | **11** | 12 | Solo queda afuera LBO (99), el más lejano de PAL (sección 1, paso 12). |
-| RET → PMA | RET, PMA | 18 | **2** | 12 | PMA es el vecino más cercano de RET. |
-| RET → CUN | RET, PAL, MON, CUN | 129 | 12 | 12 | **Peor caso:** CUN es el más lejano de RET, sale último. |
-| RET → RET | RET | 0 | 1 | 12 | El origen es el destino: corta en la primera extracción. |
+| RET → PMA | RET, PMA | 36 | **4** | 31 | Traza 8.1. |
+| HGA → LBO | HGA, CON, LBO | 47 | **5** | 31 | Relajación 51 → 47 antes de sacarlo. |
+| OBE → HIT | OBE, CGR, ABA, HIT | 60 | **11** | 31 | |
+| LBO → HIT | LBO, CON, CGR, ABA, HIT | 107 | **13** | 31 | |
+| PAL → CUN | PAL, PLA, AEP, CUN | 88 | **14** | 31 | |
+| CON → PCE | CON, CGR, ABA, HIT, PCE | 95 | **16** | 31 | |
+| RET → CUN | RET, REC, PAL, PLA, AEP, CUN | 154 | **23** | 31 | |
+| LBO → VEL | LBO, CON, HGA, BOE, CAB, FLO, VEL | 232 | **27** | 31 | |
+| MAT → CUN | MAT, FLO, CAB, PCE, CHA, COL, BEL, MON, CUN | 263 | 31 | 31 | **Peor caso:** es el par más lejano (diámetro), CUN sale último. |
+| RET → RET | RET | 0 | 1 | 31 | El origen es el destino: corta en la primera extracción. |
 | Semilla cátedra A → H | A, B, C, D, F, H | 20 | **7** | 8 | Salen A 0, B 4, C 7, D 9, E 14, F 17, H 20; G queda en la cola con 24 (diapositiva de la clase 13). |
 
-Las cuatro primeras son salidas reales del endpoint; todas están en `UcsTest`, que además verifica
-en cada caso que camino y costo sean iguales a los de `dijkstra` y que
-`nodosExpandidosUcs ≤ nodosExpandidosDijkstra`.
+`UcsTest` cubre RET → PMA, HGA → LBO, OBE → HIT, MAT → CUN, RET → RET y la semilla, y en cada caso
+verifica que camino y costo sean iguales a los de `dijkstra` y que
+`nodosExpandidosUcs ≤ nodosExpandidosDijkstra`. Las demás filas son salidas reales del endpoint.
+
+Lectura: cuanto más cerca está el destino, más ahorra UCS (RET → PMA expande 4 de 31). En el peor
+caso (destino más lejano o inalcanzable) expande todo y cuesta lo mismo que Dijkstra:
+O((V + E) log V).
 
 ---
 
@@ -748,47 +964,74 @@ en cada caso que camino y costo sean iguales a los de `dijkstra` y que
 
 Parámetro opcional `infectados` de `/dijkstra` y `/rutas`: lugares que ninguna ruta puede pisar.
 Dijkstra no relaja hacia un infectado (nunca entra a la cola); el backtracking los arranca como
-visitados. Detalle y complejidad en
-[`ENDPOINTS.md`](ENDPOINTS.md#lugares-infectados-en-dijkstra).
+visitados. Detalle y complejidad en la ficha de
+[`/dijkstra`](ENDPOINTS.md#get-apigrafodijkstra).
 
 ### 9.1 Casos calculados a mano (minutos a pie)
 
 | Consulta | Sin infectados | Con infectados | Salida real |
 |---|---|---|---|
-| PAL → CUN, `infectados=MON` | PAL – MON – CUN = 66 + 18 = 84 | PAL – CUN = **90** | `{"vertices":["PAL","CUN"],"costoTotal":90.0}` |
-| LBO → HIT, `infectados=CON` | LBO – CON – ABA – HIT = 29 + 36 + 19 = 84 | LBO – PMA – OBE – ABA – HIT = 36 + 20 + 28 + 19 = **103** | `{"vertices":["LBO","PMA","OBE","ABA","HIT"],"costoTotal":103.0}` |
-| LBO → HIT, `infectados=CON,ABA` | 84 | LBO – PMA – RET – PAL – HIT = 36 + 18 + 45 + 21 = **120** | `{"vertices":["LBO","PMA","RET","PAL","HIT"],"costoTotal":120.0}` |
-| RET → CUN, `infectados=PAL` | RET – PAL – MON – CUN = 129 | **sin camino** | 422 `No hay camino de RET a CUN` |
-| PAL → CUN, `infectados=MON,PAL` | — | origen infectado | 400 `El origen PAL esta infectado: no se puede usar` |
+| HGA → LBO, `infectados=CON` | HGA – CON – LBO = 15 + 32 = 47 | HGA – LBO = **51** (la calle directa) | `{"vertices":["HGA","LBO"],"costoTotal":51.0}` |
+| LBO → HIT, `infectados=CON` | LBO – CON – CGR – ABA – HIT = 32 + 33 + 27 + 15 = 107 | LBO – HGA – BOE – ABA – HIT = 51 + 36 + 36 + 15 = **138** | `{"vertices":["LBO","HGA","BOE","ABA","HIT"],"costoTotal":138.0}` |
+| LBO → HIT, `infectados=CON,BOE` | 107 | LBO – SAN – PMA – OBE – CGR – ABA – HIT = 34 + 20 + 28 + 18 + 27 + 15 = **142** | `{"vertices":["LBO","SAN","PMA","OBE","CGR","ABA","HIT"],"costoTotal":142.0}` |
+| OBE → HIT, `infectados=CGR` | OBE – CGR – ABA – HIT = 18 + 27 + 15 = 60 | OBE – REC – ABA – HIT = 31 + 36 + 15 = **82** | `{"vertices":["OBE","REC","ABA","HIT"],"costoTotal":82.0}` |
+| RET → CUN, `infectados=PLA` | RET – REC – PAL – PLA – AEP – CUN = 154 | RET – REC – PAL – CHA – COL – BEL – MON – CUN = 26 + 40 + 43 + 19 + 27 + 24 + 20 = **199** | `{"vertices":["RET","REC","PAL","CHA","COL","BEL","MON","CUN"],"costoTotal":199.0}` |
+| OBE → RES, `infectados=PMA` | OBE – PMA – RES = 28 + 15 = 43 | **sin camino** | 422 `No hay camino de OBE a RES` |
+| PAL → CUN, `infectados=PAL` | — | origen infectado | 400 `El origen PAL esta infectado: no se puede usar` |
 | PAL → CUN, `infectados=XXX` | — | id inexistente | 400 `No existe el nodo con id: XXX` |
 
-**Por qué PAL → CUN pasa a 90.** En la traza de la sección 1, dist[CUN] arranca en 90 por la calle
-directa y baja a 84 cuando se extrae MON (66 + 18). Con MON infectado, al expandir PAL no se relaja
-hacia MON: dist[MON] queda en ∞, MON nunca se extrae y la mejora a 84 no ocurre. CUN se queda con
-90, previo[CUN] = PAL.
+Todos los casos están en `LugaresInfectadosTest` (sin Neo4j).
 
-**Por qué LBO → HIT con CON, ABA da 120.** Sin CON ni ABA, a HIT solo se llega por PAL o PCE, y a
-PCE solo por ABA o HIT: hay que llegar a PAL. Desde LBO la única salida es PMA (36). De PMA a PAL:
-por RET, 18 + 45 = 63; por RET – REC, 18 + 20 + 30 = 68; por OBE – REC, 20 + 25 + 30 = 75. Gana RET: 36 + 63 + 21 = 120.
+**Por qué HGA → LBO pasa a 51.** En la traza de la sección 1, dist[LBO] arranca en 51 por la calle
+directa y baja a 47 cuando se expande CON (paso 2). Con CON infectado, al expandir HGA no se relaja
+hacia CON: dist[CON] queda en ∞, CON nunca se extrae y la mejora a 47 no ocurre. El otro acceso a
+LBO es por SAN, pero sin CON llegar a SAN obliga a rodear por Puerto Madero y cuesta mucho más. LBO
+se queda con 51, previo[LBO] = HGA.
 
-**Por qué RET → CUN queda sin camino.** Las calles de CUN son solo MON – CUN y PAL – CUN, y las de
-MON solo PAL – MON y MON – CUN. Con PAL infectado, el conjunto {MON, CUN} no tiene ninguna calle
-hacia el resto: el grafo sin PAL queda desconectado. Dijkstra termina con dist[CUN] = ∞ y responde 422.
+**Por qué LBO → HIT con CON da 138 y con CON, BOE da 142.** LBO tiene tres calles: CON 32, HGA 51
+y SAN 34. Sin CON hay dos salidas: por HGA – BOE – ABA – HIT (51 + 36 + 36 + 15 = 138) o por
+SAN – PMA – OBE – CGR – ABA – HIT (34 + 20 + 28 + 18 + 27 + 15 = 142); gana la primera, que usa justo
+la calle "cara" HGA – LBO. Si además se infecta BOE, la primera desaparece y queda la de 142.
+
+**Por qué OBE → HIT con CGR da 82.** CGR es el paso natural del Obelisco hacia el Abasto
+(18 + 27). Sin CGR, a ABA se llega por REC (31 + 36 = 67) y de ahí a HIT (15): 82.
+
+**Por qué RET → CUN con PLA da 199.** CUN tiene dos calles: AEP – CUN y MON – CUN. Sin PLA, a AEP
+solo se llega por BEL (59), así que conviene entrar por el Monumental: RET – REC – PAL (66), y de
+PAL hacia el norte por CHA – COL – BEL – MON – CUN (43 + 19 + 27 + 24 + 20 = 133): 199.
+
+**Por qué OBE → RES queda sin camino.** La Reserva Ecológica tiene una sola calle, PMA – RES: Puerto
+Madero es un **punto de articulación**. Con PMA infectado, RES queda aislado del resto; Dijkstra
+termina con dist[RES] = ∞ y responde 422.
 
 ### 9.2 Backtracking con un infectado
 
-`GET /api/grafo/rutas?origen=RET&destino=CUN&costoMaximo=150&saltosMaximos=4&infectados=REC`
+`GET /api/grafo/rutas?origen=LBO&destino=HIT&costoMaximo=140&saltosMaximos=5&infectados=CON`
 
 | | Rutas | Nodos con poda | Nodos sin poda |
 |---|---|---|---|
-| Sin infectados | 4 | 118 | 684 |
-| `infectados=REC` | 2: RET – PAL – CUN (45 + 90 = 135) y RET – PAL – MON – CUN (45 + 66 + 18 = 129) | **57** | **212** |
+| Sin infectados | 5 (107, 134, 132, 138, 127) | 106 | 522.659 |
+| `infectados=CON` | 1: LBO – HGA – BOE – ABA – HIT (138) | **22** | **71.600** |
 
-Las dos rutas que desaparecen son las que pasaban por REC (RET – REC – PAL – CUN = 140 y
-RET – REC – PAL – MON – CUN = 134). Por REC no se pasa, así que hay que llegar a PAL: directo (45) o
-rodeando, por ejemplo RET – OBE – ABA – HIT – PAL = 22 + 28 + 19 + 21 = 90, y desde PAL faltan al
-menos 84 (90 + 84 = 174 > 150). Por eso quedan solo las que usan RET – PAL. Con y sin poda devuelven
-las mismas rutas. Los nodos explorados bajan en las dos corridas porque REC nunca se visita: se
-eliminan todos los subárboles que colgaban de él, sin entrar a ninguno.
+Cuatro de las cinco rutas pasaban por CON; queda solo la que sale por la calle directa a HGA, que
+es además el camino de Dijkstra con CON infectado (9.1). La alternativa por SAN – PMA – OBE – CGR –
+ABA – HIT cuesta 142 > 140 y usa 6 tramos > 5, así que no entra. Lo verifica
+`LugaresInfectadosTest.rutasSinConstitucion`.
 
-Casos cubiertos por `LugaresInfectadosTest` (sin Neo4j).
+`GET /api/grafo/rutas?origen=RET&destino=CUN&costoMaximo=200&saltosMaximos=8&infectados=PLA`
+
+| | Rutas | Nodos con poda | Nodos sin poda |
+|---|---|---|---|
+| Sin infectados | 3 (182, 199, 154) | 542 | 807.257 |
+| `infectados=PLA` | 1: RET – REC – PAL – CHA – COL – BEL – MON – CUN (199) | **506** | **246.669** |
+
+Las dos rutas que desaparecen (182 y 154) entraban a CUN por PLA – AEP; queda la de 199, que es
+también el camino de Dijkstra con PLA infectado. Salida real del endpoint con los defaults.
+
+En los dos casos con y sin poda devuelven las mismas rutas, y los nodos explorados bajan en las dos
+corridas porque el infectado nunca se visita: se eliminan todos los subárboles que colgaban de él,
+sin entrar a ninguno. La baja es mucho mayor sin poda (807.257 → 246.669) que con poda
+(542 → 506). Los caminos que no tocan PLA se exploran igual en las dos corridas, así que la
+diferencia es exactamente lo que colgaba de PLA: sin poda, 560.588 nodos (todos los caminos simples
+que pasaban por PLA); con poda, solo 36, porque la mayoría de esas ramas ya se cortaba por costo o
+tramos.

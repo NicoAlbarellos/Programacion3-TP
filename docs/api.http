@@ -1,33 +1,49 @@
-### Verificar conexión y datos    (esperado: 12 vértices, 21 aristas, no dirigido)
+### Verificar conexión y datos    (esperado: 31 vértices, 51 aristas, no dirigido)
 GET http://localhost:8080/api/grafo/resumen
 
-### Recorridos    (refugios alcanzables desde Retiro)
+### Mapa de la demo    (esperado: 31 lugares, 51 calles, costos que suman 1782)
+GET http://localhost:8080/api/mapa
+
+### Recorridos    (refugios alcanzables desde Retiro: los 31 lugares)
 GET http://localhost:8080/api/grafo/bfs?origen=RET
 GET http://localhost:8080/api/grafo/dfs?origen=RET
 
 ### Error controlado    (esperado: 400 con JSON)
 GET http://localhost:8080/api/grafo/bfs?origen=XXX
 
-### Caminos mínimos    (esperado: PAL->CUN = 84 por MON, no 90 directo)
-GET http://localhost:8080/api/grafo/dijkstra?origen=PAL&destino=CUN
+### Caminos mínimos    (esperado: HGA->LBO = 47 por CON, no 51 directo)
+GET http://localhost:8080/api/grafo/dijkstra?origen=HGA&destino=LBO
+### (esperado: RET,REC,PAL,PLA,AEP,CUN = 154)
 GET http://localhost:8080/api/grafo/dijkstra?origen=RET&destino=CUN
+### (esperado: 961 pares, suma 111730)
 GET http://localhost:8080/api/grafo/floyd
-GET http://localhost:8080/api/grafo/floyd/camino?origen=LBO&destino=CUN
+### (esperado: igual que Dijkstra, HGA,CON,LBO = 47)
+GET http://localhost:8080/api/grafo/floyd/camino?origen=HGA&destino=LBO
+### (esperado: 31 vértices, 29791 operaciones Floyd, 961 nodos y 3162 aristas Dijkstra)
 GET http://localhost:8080/api/grafo/floyd/comparacion
-GET http://localhost:8080/api/grafo/ucs?origen=RET&destino=CUN
+### (esperado: RET,PMA = 36, 4 expandidos UCS contra 31 Dijkstra)
+GET http://localhost:8080/api/grafo/ucs?origen=RET&destino=PMA
+### (esperado: OBE,CGR,ABA,HIT = 60, 11 contra 31)
+GET http://localhost:8080/api/grafo/ucs?origen=OBE&destino=HIT
+### (esperado: 263, peor caso: 31 contra 31)
+GET http://localhost:8080/api/grafo/ucs?origen=MAT&destino=CUN
 
-### Lugares infectados    (esperado: MON infectado -> PAL,CUN directo = 90)
-GET http://localhost:8080/api/grafo/dijkstra?origen=PAL&destino=CUN&infectados=MON
-### (esperado: sin CON ni ABA -> LBO,PMA,RET,PAL,HIT = 120)
-GET http://localhost:8080/api/grafo/dijkstra?origen=LBO&destino=HIT&infectados=CON,ABA
-### (esperado: 422 "No hay camino de RET a CUN": sin PAL, {MON, CUN} queda aislado)
-GET http://localhost:8080/api/grafo/dijkstra?origen=RET&destino=CUN&infectados=PAL
+### Lugares infectados    (esperado: CON infectado -> HGA,LBO directo = 51)
+GET http://localhost:8080/api/grafo/dijkstra?origen=HGA&destino=LBO&infectados=CON
+### (esperado: sin CON -> LBO,HGA,BOE,ABA,HIT = 138; sin infectados 107)
+GET http://localhost:8080/api/grafo/dijkstra?origen=LBO&destino=HIT&infectados=CON
+### (esperado: sin CGR -> OBE,REC,ABA,HIT = 82; sin infectados 60)
+GET http://localhost:8080/api/grafo/dijkstra?origen=OBE&destino=HIT&infectados=CGR
+### (esperado: sin PLA -> RET,REC,PAL,CHA,COL,BEL,MON,CUN = 199; sin infectados 154)
+GET http://localhost:8080/api/grafo/dijkstra?origen=RET&destino=CUN&infectados=PLA
+### (esperado: 422 "No hay camino de OBE a RES": la Reserva solo se conecta con PMA)
+GET http://localhost:8080/api/grafo/dijkstra?origen=OBE&destino=RES&infectados=PMA
 ### (esperado: 400 "El origen PAL esta infectado: no se puede usar")
 GET http://localhost:8080/api/grafo/dijkstra?origen=PAL&destino=CUN&infectados=MON,PAL
-### (esperado: 2 rutas RET-PAL-CUN 135 y RET-PAL-MON-CUN 129, 57 nodos con poda / 212 sin poda)
-GET http://localhost:8080/api/grafo/rutas?origen=RET&destino=CUN&costoMaximo=150&saltosMaximos=4&infectados=REC
+### (esperado: 1 ruta RET,REC,PAL,CHA,COL,BEL,MON,CUN de 199, 506 nodos con poda / 246669 sin poda)
+GET http://localhost:8080/api/grafo/rutas?origen=RET&destino=CUN&infectados=PLA
 
-### Árbol de recubrimiento mínimo    (esperado: 11 aristas, costo total 287)
+### Árbol de recubrimiento mínimo    (esperado: 30 aristas, costo total 835, mismas calles en los dos)
 GET http://localhost:8080/api/grafo/prim?origen=RET
 GET http://localhost:8080/api/grafo/kruskal
 
@@ -40,10 +56,12 @@ GET http://localhost:8080/api/seleccion/greedy?capacidad=12
 GET http://localhost:8080/api/seleccion/dinamica?capacidad=12
 GET http://localhost:8080/api/seleccion/comparar?capacidad=12
 
-### Backtracking    (esperado: 4 rutas, 118 nodos con poda / 684 sin poda)
-GET http://localhost:8080/api/grafo/rutas?origen=RET&destino=CUN&costoMaximo=150&saltosMaximos=4
-### (esperado: 1 ruta RET-PAL-MON-CUN de 129, 144 / 684)
-GET http://localhost:8080/api/grafo/rutas?origen=RET&destino=CUN&costoMaximo=130&saltosMaximos=5
+### Backtracking con los defaults (200 min, 8 tramos)    (esperado: 3 rutas, 542 nodos con poda / 807257 sin poda)
+GET http://localhost:8080/api/grafo/rutas?origen=RET&destino=CUN
+### (esperado: 1 ruta RET,REC,PAL,PLA,AEP,CUN de 154, 305 / 807257)
+GET http://localhost:8080/api/grafo/rutas?origen=RET&destino=CUN&costoMaximo=180&saltosMaximos=6
+### (esperado: 0 rutas, 153 / 807257)
+GET http://localhost:8080/api/grafo/rutas?origen=RET&destino=CUN&costoMaximo=150&saltosMaximos=5
 ### (esperado: 400 "El costo maximo no puede ser negativo: -5.0")
 GET http://localhost:8080/api/grafo/rutas?origen=RET&destino=CUN&costoMaximo=-5
 
@@ -64,4 +82,3 @@ GET http://localhost:8080/api/seleccion/greedy?capacidad=-3
 GET http://localhost:8080/api/seleccion/quicksort?criterio=precio
 ### (esperado: 400 "Orden invalido: arriba. Use asc o desc")
 GET http://localhost:8080/api/seleccion/mergesort?orden=arriba
-

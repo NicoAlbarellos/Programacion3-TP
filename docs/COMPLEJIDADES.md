@@ -4,7 +4,7 @@ Resumen de la complejidad de cada algoritmo implementado (lo pide el hito 10). L
 completa de cada fila, con el ejemplo real, está en la ficha del endpoint en
 [`ENDPOINTS.md`](ENDPOINTS.md).
 
-Notación: **V** = lugares (vértices), **E** = calles (aristas); en nuestro grafo V = 12 y E = 21.
+Notación: **V** = lugares (vértices), **E** = calles (aristas); en nuestro grafo V = 31 y E = 51.
 **n** = cantidad de elementos a ordenar o de suministros; **W** = capacidad de la mochila en kg.
 **b** = grado máximo de un lugar; **R** = rutas encontradas; **k** = contenedores pedidos y
 **m** = min(k, n) contenedores efectivos.
@@ -37,7 +37,7 @@ se hace fuera de las llamadas (partir y combinar).
 | BFS | `/api/grafo/bfs` | No aplica: iterativo. Se cuenta: cada vértice entra a la cola una vez (V) y cada lista de adyacencia se recorre una vez (2E). | O(V + E) | O(V) | Cola FIFO (`ArrayDeque`, O(1) por operación), `boolean[] visitado`, lista de adyacencia |
 | DFS | `/api/grafo/dfs` | No es divide y conquista: una llamada por vértice (V) y cada lista recorrida una vez (2E). | O(V + E) | O(V) (pila de llamadas, profundidad ≤ V) | Pila implícita (recursión), `boolean[] visitado`, lista de adyacencia |
 | Dijkstra | `/api/grafo/dijkstra` | No aplica. A lo sumo E + 1 entradas en la cola, cada `add`/`poll` O(log V). | O((V + E) log V) | O(V + E) | Heap binario (`PriorityQueue`) con eliminación perezosa; arreglos `dist[]`, `previo[]` |
-| UCS (Dijkstra con parada temprana) | `/api/grafo/ucs` | No aplica: mismo bucle que Dijkstra, corta cuando el destino SALE de la cola. Peor caso (destino último en salir o inalcanzable): expande los V lugares, igual que Dijkstra. El endpoint corre además Dijkstra completo solo para contar sus expandidos: mismo orden. | O((V + E) log V) peor caso; en la práctica solo expande los lugares con g(n) ≤ costo del destino (LBO → HIT: 8 de 12) | O(V + E) | Heap binario (`PriorityQueue`) por g(n) con eliminación perezosa; `dist[]`, `previo[]` |
+| UCS (Dijkstra con parada temprana) | `/api/grafo/ucs` | No aplica: mismo bucle que Dijkstra, corta cuando el destino SALE de la cola. Peor caso (destino último en salir o inalcanzable): expande los V lugares, igual que Dijkstra. El endpoint corre además Dijkstra completo solo para contar sus expandidos: mismo orden. | O((V + E) log V) peor caso; en la práctica solo expande los lugares con g(n) ≤ costo del destino (OBE → HIT: 11 de 31) | O(V + E) | Heap binario (`PriorityQueue`) por g(n) con eliminación perezosa; `dist[]`, `previo[]` |
 | Floyd-Warshall | `/api/grafo/floyd` | Recurrencia de PD (no de tiempo): d_k[i][j] = min(d_(k−1)[i][j], d_(k−1)[i][k] + d_(k−1)[k][j]). V capas × V² celdas, O(1) cada una. | O(V³) | O(V²) | Matriz de adyacencia `double[][]` (acceso O(1)) |
 | Floyd con camino | `/api/grafo/floyd/camino` | Igual que Floyd; al relajar, siguiente[i][j] = siguiente[i][k]. Reconstrucción: a lo sumo V saltos. | O(V³) + O(V) = O(V³) | O(V²) | Matriz de distancias + matriz `int[][] siguiente` |
 | Floyd vs. Dijkstra V veces | `/api/grafo/floyd/comparacion` | No aplica: corre los dos. | O(V³ + V (V + E) log V) | O(V² + E) | Las de Floyd y Dijkstra, más contadores |
@@ -63,12 +63,13 @@ se hace fuera de las llamadas (partir y combinar).
   entrada; en función del tamaño de la entrada crece exponencialmente.
 - **UCS vs. Dijkstra:** misma complejidad en el peor caso; UCS ahorra trabajo en la práctica
   (constante, no asintótico) porque corta al sacar el destino de la cola. Cortar al descubrirlo
-  sería incorrecto (PAL → CUN daría 90 en lugar de 84).
+  sería incorrecto (HGA → LBO daría 51 en lugar de 47).
 - **Floyd vs. Dijkstra V veces:** O(V³) contra O(V (V + E) log V). En grafos dispersos (E ≈ V,
   como un mapa de calles) gana Dijkstra, O(V² log V); en densos (E ≈ V²) gana Floyd. Floyd además
-  acepta aristas negativas y detecta ciclos negativos.
+  acepta aristas negativas y detecta ciclos negativos. En nuestro grafo (V = 31, E = 51):
+  Floyd hace 31³ = 29791 relajaciones; Dijkstra V veces expande 961 nodos y examina 3162 aristas.
 - **Backtracking y Branch & Bound son exponenciales en el peor caso.** La poda no cambia el orden
-  del peor caso, cambia cuánto del árbol se recorre en la práctica: en `/rutas` (RET → CUN, 150 min,
-  4 tramos) 118 nodos contra 684, y en `/repartir` (k = 3) 61 contra 9841. Backtracking poda por
+  del peor caso, cambia cuánto del árbol se recorre en la práctica: en `/rutas` (RET → CUN con los
+  defaults, 200 min y 8 tramos) 542 nodos contra 807.257, y en `/repartir` (k = 3) 61 contra 9841. Backtracking poda por
   **viabilidad** (la rama ya no puede dar una ruta válida); Branch & Bound poda por **optimalidad**
   (la cota optimista dice que la rama no puede mejorar la mejor solución conocida).
