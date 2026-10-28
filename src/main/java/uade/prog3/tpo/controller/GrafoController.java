@@ -8,6 +8,7 @@ import uade.prog3.tpo.algorithm.Recorridos;
 import uade.prog3.tpo.service.Grafo;
 import uade.prog3.tpo.service.GrafoService;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -52,11 +53,13 @@ public class GrafoController {
     @GetMapping("/resumen")
     public Map<String, Object> resumen() {
         Grafo g = grafoService.cargar(DIRIGIDO);
-        return Map.of(
-                "vertices", g.cantidadVertices(),
-                "aristas", g.cantidadAristas(),
-                "dirigido", g.esDirigido(),
-                "ids", g.ids());
+        // LinkedHashMap: el JSON sale siempre con las claves en este orden (Map.of no lo garantiza)
+        Map<String, Object> resumen = new LinkedHashMap<>();
+        resumen.put("vertices", g.cantidadVertices());
+        resumen.put("aristas", g.cantidadAristas());
+        resumen.put("dirigido", g.esDirigido());
+        resumen.put("ids", g.ids());
+        return resumen;
     }
 
     /** GET /api/grafo/dfs?origen=RET */
@@ -84,7 +87,7 @@ public class GrafoController {
         return caminosMinimos.floydWarshall(grafoService.cargar(DIRIGIDO));
     }
 
-    /** GET /api/grafo/floyd/camino?origen=PAL&destino=CUN */
+    /** GET /api/grafo/floyd/camino?origen=HGA&destino=LBO */
     @GetMapping("/floyd/camino")
     public CaminosMinimos.Camino caminoFloyd(@RequestParam String origen, @RequestParam String destino) {
         return caminosMinimos.caminoFloyd(grafoService.cargar(DIRIGIDO), origen, destino);
@@ -121,12 +124,15 @@ public class GrafoController {
         return arbolRecubrimiento.kruskal(grafoService.cargar(false));
     }
 
-    /** GET /api/grafo/rutas?origen=RET&destino=CUN&costoMaximo=150&saltosMaximos=4  (opcional: &infectados=REC) */
+    /**
+     * GET /api/grafo/rutas?origen=RET&destino=CUN&costoMaximo=200&saltosMaximos=8  (opcional: &infectados=PLA)
+     * Defaults moderados: con limites muy holgados la cantidad de rutas (y el JSON) crece mucho.
+     */
     @GetMapping("/rutas")
     public Backtracking.ResultadoRutas rutas(@RequestParam String origen,
                                              @RequestParam String destino,
-                                             @RequestParam(defaultValue = "1000") double costoMaximo,
-                                             @RequestParam(defaultValue = "10") int saltosMaximos,
+                                             @RequestParam(defaultValue = "200") double costoMaximo,
+                                             @RequestParam(defaultValue = "8") int saltosMaximos,
                                              @RequestParam(required = false) Set<String> infectados) {
         return backtracking.rutasSimples(grafoService.cargar(DIRIGIDO), origen, destino,
                 costoMaximo, saltosMaximos, infectados);

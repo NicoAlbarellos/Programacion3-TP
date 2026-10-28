@@ -240,11 +240,11 @@
       <h2>Ruta más rápida</h2>
       <p class="ayuda">Dijkstra (cola de prioridad, relajación) o Floyd-Warshall (matriz siguiente). Deberían coincidir.</p>
       <div class="controles">
-        <label>Origen <select class="sel-lugar" id="cam-origen" data-default="PAL"></select></label>
-        <label>Destino <select class="sel-lugar" id="cam-destino" data-default="CUN"></select></label>
+        <label>Origen <select class="sel-lugar" id="cam-origen" data-default="HGA"></select></label>
+        <label>Destino <select class="sel-lugar" id="cam-destino" data-default="LBO"></select></label>
         <button class="accion" onclick="correrCamino('dijkstra')">Dijkstra</button>
         <button class="accion" onclick="correrCamino('floyd/camino')">Floyd</button>
-        <button class="secundaria" onclick="casoPalCun()">Caso PAL → CUN</button>
+        <button class="secundaria" onclick="casoHgaLbo()">Caso HGA → LBO</button>
       </div>
       <div class="resultado" id="res-caminos"></div>
     </div>
@@ -278,8 +278,8 @@
       <div class="controles">
         <label>Origen <select class="sel-lugar" id="bt-origen" data-default="RET"></select></label>
         <label>Destino <select class="sel-lugar" id="bt-destino" data-default="CUN"></select></label>
-        <label>Costo máx. (min) <input type="number" id="bt-costo" value="150" min="0" step="1"></label>
-        <label>Saltos máx. <input type="number" id="bt-saltos" value="4" min="0" step="1"></label>
+        <label>Costo máx. (min) <input type="number" id="bt-costo" value="200" min="0" step="1"></label>
+        <label>Saltos máx. <input type="number" id="bt-saltos" value="8" min="0" step="1"></label>
         <button class="accion" onclick="correrRutas()">Buscar rutas</button>
       </div>
       <div class="resultado" id="res-rutas"></div>
@@ -336,16 +336,24 @@
  * Presentacion: coordenadas aproximadas (lat, lon) de cada lugar.
  * Solo sirven para dibujar. Un id que no este aca se ubica cerca de sus
  * vecinos (o abajo si no tiene), asi un refugio nuevo igual aparece.
- * MON y CUN estan apenas separados de su posicion real para que se lean.
  * ===================================================================== */
 const COORDENADAS = {
-  ABA: [-34.6037, -58.4108], CON: [-34.6276, -58.3815], CUN: [-34.5395, -58.4395],
-  HIT: [-34.6066, -58.4210], LBO: [-34.6394, -58.3627], MON: [-34.5465, -58.4510],
-  OBE: [-34.6037, -58.3816], PAL: [-34.5810, -58.4210], PCE: [-34.6065, -58.4357],
-  PMA: [-34.6110, -58.3630], REC: [-34.5875, -58.3930], RET: [-34.5915, -58.3745]
+  ABA: [-34.6037, -58.4108], AEP: [-34.5580, -58.4165], AGR: [-34.5925, -58.4835], BEL: [-34.5607, -58.4497],
+  BOE: [-34.6248, -58.4165], CAB: [-34.6185, -58.4345], CGR: [-34.6097, -58.3925], CHA: [-34.5880, -58.4510],
+  COL: [-34.5770, -58.4470], CON: [-34.6276, -58.3815], CUN: [-34.5395, -58.4395], DEV: [-34.6010, -58.5130],
+  FLO: [-34.6285, -58.4635], HGA: [-34.6307, -58.3916], HIT: [-34.6066, -58.4210], LBO: [-34.6394, -58.3627],
+  MAT: [-34.6580, -58.5030], MON: [-34.5465, -58.4510], OBE: [-34.6037, -58.3816], PAL: [-34.5810, -58.4210],
+  PCE: [-34.6065, -58.4357], PCH: [-34.6355, -58.4385], PLA: [-34.5697, -58.4116], PMA: [-34.6110, -58.3630],
+  REC: [-34.5875, -58.3930], RES: [-34.6140, -58.3530], RET: [-34.5915, -58.3745], SAA: [-34.5545, -58.4810],
+  SAN: [-34.6206, -58.3716], VEL: [-34.6355, -58.5205], VUR: [-34.5745, -58.4875]
 };
 /* Donde va el nombre respecto del nodo (para que no se pisen). Default: abajo. */
-const POSICION_ETIQUETA = { MON: "izq", CUN: "der", HIT: "abajo", PCE: "izq", RET: "der", PMA: "der", LBO: "der", OBE: "arriba", REC: "arriba", PAL: "arriba", ABA: "der", CON: "abajo" };
+const POSICION_ETIQUETA = {
+  ABA: "der", AEP: "der", AGR: "izq", BEL: "der", BOE: "abajo", CAB: "izq", CGR: "abajo", CHA: "arriba",
+  COL: "der", CON: "der", CUN: "der", DEV: "abajo", FLO: "abajo", HGA: "abajo", HIT: "arriba", LBO: "abajo",
+  MAT: "abajo", MON: "izq", OBE: "arriba", PAL: "der", PCE: "abajo", PCH: "abajo", PLA: "der", PMA: "izq",
+  REC: "abajo", RES: "abajo", RET: "der", SAA: "izq", SAN: "izq", VEL: "abajo", VUR: "izq"
+};
 
 const COLOR_TIPO = { REFUGIO: "var(--refugio)", HOSPITAL: "var(--hospital)", ESTACION: "var(--estacion)", PUNTO: "var(--punto)" };
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -414,7 +422,7 @@ function calcularPosiciones(lugares, calles) {
   const latMin = Math.min(...lats), latMax = Math.max(...lats);
   const lonMin = Math.min(...lons), lonMax = Math.max(...lons);
   const factorLon = Math.cos((latMin + latMax) / 2 * Math.PI / 180);
-  const ancho = 760, margen = 90;
+  const ancho = 1300, margen = 150;
   const escala = (ancho - 2 * margen) / ((lonMax - lonMin) * factorLon || 1);
   const alto = Math.round((latMax - latMin) * escala + 2 * margen + 40);
 
@@ -588,9 +596,9 @@ async function correrCamino(endpoint) {
       ${directa && !usaDirecta ? `<div class="nota">Existe la calle directa ${esc(o)} – ${esc(d)} de ${fmt(directa.costo)} min, pero la relajación encontró un camino más corto: ${fmt(r.costoTotal)} &lt; ${fmt(directa.costo)}.</div>` : ""}`);
   } catch (e) { mostrarError("res-caminos", e); }
 }
-function casoPalCun() {
-  $("cam-origen").value = "PAL";
-  $("cam-destino").value = "CUN";
+function casoHgaLbo() {
+  $("cam-origen").value = "HGA";
+  $("cam-destino").value = "LBO";
   correrCamino("dijkstra");
 }
 
@@ -610,7 +618,7 @@ async function correrMst(tipo) {
       <div class="nota">${tipo === "prim"
         ? "Prim agrega la calle más barata que conecta el árbol con un lugar nuevo (cola de prioridad por key)."
         : "Kruskal recorre las calles de menor a mayor y descarta las que cierran un ciclo (find(u) = find(v))."}
-        Con costos todos distintos el MST es único; acá hay empates, pero igual Prim y Kruskal dan las mismas calles.</div>`);
+        Con costos todos distintos el MST es único; acá hay costos repetidos, pero el árbol igual es único: Prim y Kruskal dan las mismas calles.</div>`);
     await animarArbol(r.aristas);
   } catch (e) { mostrarError("res-mst", e); }
 }
@@ -696,7 +704,7 @@ async function correrRutas() {
   try {
     const r = await api("/api/grafo/rutas?" + q);
     rutasActuales = r.rutas;
-    const ahorro = r.nodosSinPoda > 0 ? Math.round(100 * (1 - r.nodosConPoda / r.nodosSinPoda)) : 0;
+    const ahorro = r.nodosSinPoda > 0 ? Math.floor(100 * (1 - r.nodosConPoda / r.nodosSinPoda)) : 0;
     mostrar("res-rutas", `
       <div class="cifras">${cifra("Rutas", r.rutas.length, "destacada")}${cifra("Ahorro de la poda", ahorro + " %", "verde")}</div>
       <div class="barras">
