@@ -89,59 +89,77 @@ class BacktrackingTest {
     }
 
     // ---------- dominio CABA ----------
+    // Sin poda la corrida enumera TODOS los caminos simples desde el origen
+    // (desde RET: 807.257 nodos), con poda solo una fraccion.
 
     @Test
-    void retiroCiudadUniversitaria150Minutos4Saltos() {
-        ResultadoRutas r = rutas(GrafosDePrueba.dominioCaba(), "RET", "CUN", 150, 4);
-        assertEquals(List.of(
-                ruta(135, "RET", "PAL", "CUN"),
-                ruta(129, "RET", "PAL", "MON", "CUN"),
-                ruta(140, "RET", "REC", "PAL", "CUN"),
-                ruta(134, "RET", "REC", "PAL", "MON", "CUN")), r.rutas());
-        verificarNodos(r, 118, 684);
-    }
-
-    @Test
-    void retiroCiudadUniversitaria130Minutos() {
-        ResultadoRutas r = rutas(GrafosDePrueba.dominioCaba(), "RET", "CUN", 130, 5);
-        assertEquals(List.of(ruta(129, "RET", "PAL", "MON", "CUN")), r.rutas());
-        verificarNodos(r, 144, 684);
-    }
-
-    @Test
-    void constitucionParqueCentenario() {
-        ResultadoRutas r = rutas(GrafosDePrueba.dominioCaba(), "CON", "PCE", 90, 4);
-        assertEquals(List.of(
-                ruta(73, "CON", "ABA", "HIT", "PCE"),
-                ruta(66, "CON", "ABA", "PCE"),
-                ruta(89, "CON", "OBE", "ABA", "PCE")), r.rutas());
-        verificarNodos(r, 42, 684);
-    }
-
-    @Test
-    void obeliscoHospitalItaliano() {
+    void obeliscoHospitalItaliano80Minutos3Saltos() {
         ResultadoRutas r = rutas(GrafosDePrueba.dominioCaba(), "OBE", "HIT", 80, 3);
+        assertEquals(List.of(ruta(60, "OBE", "CGR", "ABA", "HIT")), r.rutas());
+        verificarNodos(r, 27, 367_114);
+    }
+
+    @Test
+    void laBocaHospitalItaliano140Minutos5Saltos() {
+        ResultadoRutas r = rutas(GrafosDePrueba.dominioCaba(), "LBO", "HIT", 140, 5);
         assertEquals(List.of(
-                ruta(47, "OBE", "ABA", "HIT"),
-                ruta(76, "OBE", "ABA", "PCE", "HIT"),
-                ruta(73, "OBE", "REC", "ABA", "HIT"),
-                ruta(76, "OBE", "REC", "PAL", "HIT")), r.rutas());
-        verificarNodos(r, 34, 333);
+                ruta(107, "LBO", "CON", "CGR", "ABA", "HIT"),
+                ruta(134, "LBO", "CON", "HGA", "BOE", "ABA", "HIT"),
+                ruta(132, "LBO", "CON", "OBE", "CGR", "ABA", "HIT"),
+                ruta(138, "LBO", "HGA", "BOE", "ABA", "HIT"),
+                ruta(127, "LBO", "SAN", "CON", "CGR", "ABA", "HIT")), r.rutas());
+        verificarNodos(r, 106, 522_659);
+    }
+
+    @Test
+    void garrahanLaBocaDevuelveElAtajoYLaCalleDirecta() {
+        // HGA-CON-LBO 47 y la calle directa HGA-LBO 51; cualquier otra pasa los 60 minutos
+        ResultadoRutas r = rutas(GrafosDePrueba.dominioCaba(), "HGA", "LBO", 60, 3);
+        assertEquals(List.of(ruta(47, "HGA", "CON", "LBO"), ruta(51, "HGA", "LBO")), r.rutas());
+        verificarNodos(r, 9, 489_963);
+    }
+
+    @Test
+    void retiroCiudadUniversitaria180Minutos6Saltos() {
+        ResultadoRutas r = rutas(GrafosDePrueba.dominioCaba(), "RET", "CUN", 180, 6);
+        assertEquals(List.of(ruta(154, "RET", "REC", "PAL", "PLA", "AEP", "CUN")), r.rutas());
+        verificarNodos(r, 305, 807_257);
     }
 
     @Test
     void sinRutasValidas() {
-        // la mas rapida (RET-PAL-MON-CUN) tarda 129 > 110
-        ResultadoRutas r = rutas(GrafosDePrueba.dominioCaba(), "RET", "CUN", 110, 3);
+        // la mas rapida (RET-REC-PAL-PLA-AEP-CUN) tarda 154 > 150
+        ResultadoRutas r = rutas(GrafosDePrueba.dominioCaba(), "RET", "CUN", 150, 5);
         assertTrue(r.rutas().isEmpty());
-        verificarNodos(r, 47, 684);
+        verificarNodos(r, 153, 807_257);
     }
 
     @Test
-    void limitesHolgadosDanTodosLosCaminosSimples() {
+    void limitesPorDefectoDelEndpoint() {
+        // mismos limites que los defaults de GrafoController.rutas (costoMaximo=200, saltosMaximos=8)
+        ResultadoRutas r = rutas(GrafosDePrueba.dominioCaba(), "RET", "CUN", 200, 8);
+        assertEquals(List.of(
+                ruta(182, "RET", "OBE", "REC", "PAL", "PLA", "AEP", "CUN"),
+                ruta(199, "RET", "REC", "PAL", "CHA", "COL", "BEL", "MON", "CUN"),
+                ruta(154, "RET", "REC", "PAL", "PLA", "AEP", "CUN")), r.rutas());
+        verificarNodos(r, 542, 807_257);
+    }
+
+    @Test
+    void conLimitesHolgadosLaPodaCasiNoAhorra() {
+        // RES solo se alcanza por la calle PMA-RES: hay UNA ruta, pero con 1000 min y 30 saltos
+        // casi ninguna rama se pasa de los limites y la busqueda igual recorre todo el mapa
+        // (ahorro de la poda: 0,5 %). Las podas sirven cuando los limites son ajustados.
+        ResultadoRutas r = rutas(GrafosDePrueba.dominioCaba(), "PMA", "RES", 1000, 30);
+        assertEquals(List.of(ruta(15, "PMA", "RES")), r.rutas());
+        verificarNodos(r, 1_245_922, 1_252_462);
+    }
+
+    @Test
+    void limitesHolgadosDevuelvenMuchasRutas() {
         ResultadoRutas r = rutas(GrafosDePrueba.dominioCaba(), "RET", "CUN", 1000, 10);
-        assertEquals(110, r.rutas().size());
-        verificarNodos(r, 682, 684);
+        assertEquals(145, r.rutas().size());
+        verificarNodos(r, 6_018, 807_257);
     }
 
     @Test
@@ -158,14 +176,15 @@ class BacktrackingTest {
         List<Ruta> todas = rutas(g, "RET", "CUN", 1e9, 1000).rutas();
         Set<List<String>> filtradas = new HashSet<>();
         for (Ruta ruta : todas) {
-            if (ruta.costoTotal() <= 150 && ruta.vertices().size() - 1 <= 4) {
+            if (ruta.costoTotal() <= 200 && ruta.vertices().size() - 1 <= 8) {
                 filtradas.add(ruta.vertices());
             }
         }
         Set<List<String>> conPoda = new HashSet<>();
-        for (Ruta ruta : rutas(g, "RET", "CUN", 150, 4).rutas()) {
+        for (Ruta ruta : rutas(g, "RET", "CUN", 200, 8).rutas()) {
             conPoda.add(ruta.vertices());
         }
+        assertEquals(3, conPoda.size());
         assertEquals(filtradas, conPoda);
     }
 

@@ -26,7 +26,7 @@ class FloydWarshallTest {
     @Test
     void dominioTieneTodosLosParesYDiagonalCero() {
         Map<String, Double> d = floydDominio();
-        assertEquals(144, d.size()); // 12 x 12: el dominio es conexo
+        assertEquals(961, d.size()); // 31 x 31: el dominio es conexo
         for (String id : GrafosDePrueba.dominioCaba().ids()) {
             assertEquals(0.0, d.get(id + "->" + id));
         }
@@ -35,13 +35,14 @@ class FloydWarshallTest {
     @Test
     void dominioCoincideConLosCalculosAMano() {
         Map<String, Double> d = floydDominio();
-        assertEquals(129.0, d.get("RET->CUN")); // RET-PAL-MON-CUN 45+66+18
-        assertEquals(84.0, d.get("PAL->CUN"));  // PAL-MON-CUN 66+18 < directo 90
-        assertEquals(183.0, d.get("LBO->CUN")); // LBO-PMA-RET-PAL-MON-CUN
-        assertEquals(165.0, d.get("LBO->MON"));
-        assertEquals(165.0, d.get("MON->LBO")); // no dirigido: simetrico
-        assertEquals(66.0, d.get("CON->PCE"));  // CON-ABA-PCE 36+30
-        assertEquals(78.0, d.get("PCE->PMA"));  // PCE-ABA-OBE-PMA 30+28+20
+        assertEquals(154.0, d.get("RET->CUN")); // RET-REC-PAL-PLA-AEP-CUN 26+40+23+21+44
+        assertEquals(47.0, d.get("HGA->LBO"));  // HGA-CON-LBO 15+32 < directo 51
+        assertEquals(88.0, d.get("PAL->CUN"));  // PAL-PLA-AEP-CUN 23+21+44
+        assertEquals(107.0, d.get("LBO->HIT")); // LBO-CON-CGR-ABA-HIT 32+33+27+15
+        assertEquals(95.0, d.get("CON->PCE"));  // CON-CGR-ABA-HIT-PCE 33+27+15+20
+        assertEquals(263.0, d.get("MAT->CUN")); // el par mas lejano (diametro)
+        assertEquals(263.0, d.get("CUN->MAT")); // no dirigido: simetrico
+        assertEquals(108.0, d.get("PCE->PMA")); // PCE-HIT-ABA-CGR-OBE-PMA 20+15+27+18+28
     }
 
     @Test
@@ -50,7 +51,7 @@ class FloydWarshallTest {
         for (double costo : floydDominio().values()) {
             suma += costo;
         }
-        assertEquals(9206.0, suma, 1e-9);
+        assertEquals(111730.0, suma, 1e-9);
     }
 
     @Test
@@ -113,13 +114,14 @@ class FloydWarshallTest {
     }
 
     @Test
-    void caminoPalermoCiudadUniversitaria() {
-        verificarCamino(GrafosDePrueba.dominioCaba(), "PAL", "CUN", 84, List.of("PAL", "MON", "CUN"));
+    void caminoGarrahanLaBoca() {
+        verificarCamino(GrafosDePrueba.dominioCaba(), "HGA", "LBO", 47, List.of("HGA", "CON", "LBO"));
     }
 
     @Test
     void caminoRetiroCiudadUniversitaria() {
-        verificarCamino(GrafosDePrueba.dominioCaba(), "RET", "CUN", 129, List.of("RET", "PAL", "MON", "CUN"));
+        verificarCamino(GrafosDePrueba.dominioCaba(), "RET", "CUN", 154,
+                List.of("RET", "REC", "PAL", "PLA", "AEP", "CUN"));
     }
 
     @Test
@@ -174,9 +176,9 @@ class FloydWarshallTest {
     @Test
     void comparacionConDijkstraEnElDominio() {
         Comparacion c = caminosMinimos.compararConDijkstra(GrafosDePrueba.dominioCaba());
-        assertEquals(12, c.vertices());
-        assertEquals(1728, c.operacionesFloyd());          // 12^3
-        assertEquals(144, c.nodosExpandidosDijkstra());    // 12 corridas x 12 nodos
-        assertEquals(504, c.aristasExaminadasDijkstra());  // 12 corridas x 2*21 entradas de adyacencia
+        assertEquals(31, c.vertices());
+        assertEquals(29791, c.operacionesFloyd());         // 31^3
+        assertEquals(961, c.nodosExpandidosDijkstra());    // 31 corridas x 31 nodos
+        assertEquals(3162, c.aristasExaminadasDijkstra()); // 31 corridas x 2*51 entradas de adyacencia
     }
 }

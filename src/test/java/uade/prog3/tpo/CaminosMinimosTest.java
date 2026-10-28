@@ -25,33 +25,43 @@ class CaminosMinimosTest {
 
     @Test
     void retiroACiudadUniversitaria() {
-        // RET-PAL 45 + PAL-MON 66 + MON-CUN 18 = 129 (por PAL-CUN directo seria 135)
-        verificar(GrafosDePrueba.dominioCaba(), "RET", "CUN", 129, List.of("RET", "PAL", "MON", "CUN"));
+        // RET-REC 26 + REC-PAL 40 + PAL-PLA 23 + PLA-AEP 21 + AEP-CUN 44 = 154
+        // (por PAL-CHA-COL-BEL-MON-CUN seria 199)
+        verificar(GrafosDePrueba.dominioCaba(), "RET", "CUN", 154,
+                List.of("RET", "REC", "PAL", "PLA", "AEP", "CUN"));
     }
 
     @Test
-    void relajacionEvitaElDirectoPalermoCiudadUniversitaria() {
-        // PAL-MON 66 + MON-CUN 18 = 84 < PAL-CUN directo 90
-        verificar(GrafosDePrueba.dominioCaba(), "PAL", "CUN", 84, List.of("PAL", "MON", "CUN"));
+    void relajacionEvitaElDirectoGarrahanLaBoca() {
+        // HGA-CON 15 + CON-LBO 32 = 47 < HGA-LBO directo 51
+        verificar(GrafosDePrueba.dominioCaba(), "HGA", "LBO", 47, List.of("HGA", "CON", "LBO"));
     }
 
     @Test
     void laBocaAHospitalItaliano() {
-        // LBO-CON 29 + CON-ABA 36 + ABA-HIT 19 = 84
-        verificar(GrafosDePrueba.dominioCaba(), "LBO", "HIT", 84, List.of("LBO", "CON", "ABA", "HIT"));
+        // LBO-CON 32 + CON-CGR 33 + CGR-ABA 27 + ABA-HIT 15 = 107
+        verificar(GrafosDePrueba.dominioCaba(), "LBO", "HIT", 107, List.of("LBO", "CON", "CGR", "ABA", "HIT"));
     }
 
     @Test
     void retiroAAbasto() {
-        // RET-REC 20 + REC-ABA 29 = 49 (por OBE: 22 + 28 = 50)
-        verificar(GrafosDePrueba.dominioCaba(), "RET", "ABA", 49, List.of("RET", "REC", "ABA"));
+        // RET-REC 26 + REC-ABA 36 = 62 (por OBE-CGR: 23 + 18 + 27 = 68)
+        verificar(GrafosDePrueba.dominioCaba(), "RET", "ABA", 62, List.of("RET", "REC", "ABA"));
     }
 
     @Test
     void laBocaACiudadUniversitaria() {
-        // LBO-PMA 36 + PMA-RET 18 + RET-PAL 45 + PAL-MON 66 + MON-CUN 18 = 183
-        verificar(GrafosDePrueba.dominioCaba(), "LBO", "CUN", 183,
-                List.of("LBO", "PMA", "RET", "PAL", "MON", "CUN"));
+        // LBO-CON 32 + CON-OBE 40 + OBE-REC 31 + REC-PAL 40 + PAL-PLA 23 + PLA-AEP 21 + AEP-CUN 44 = 231
+        verificar(GrafosDePrueba.dominioCaba(), "LBO", "CUN", 231,
+                List.of("LBO", "CON", "OBE", "REC", "PAL", "PLA", "AEP", "CUN"));
+    }
+
+    @Test
+    void mataderosACiudadUniversitariaEsElParMasLejano() {
+        // MAT-FLO 73 + FLO-CAB 43 + CAB-PCE 20 + PCE-CHA 37 + CHA-COL 19 + COL-BEL 27
+        // + BEL-MON 24 + MON-CUN 20 = 263 (diametro del mapa)
+        verificar(GrafosDePrueba.dominioCaba(), "MAT", "CUN", 263,
+                List.of("MAT", "FLO", "CAB", "PCE", "CHA", "COL", "BEL", "MON", "CUN"));
     }
 
     @Test

@@ -15,9 +15,9 @@ import static org.junit.jupiter.api.Assertions.*;
 class DominioCabaTest {
 
     @Test
-    void tieneDoceLugaresVeintiunCallesYOchoSuministros() {
-        assertEquals(12, DominioCaba.LUGARES.size());
-        assertEquals(21, DominioCaba.CALLES.size());
+    void tiene31Lugares51CallesYOchoSuministros() {
+        assertEquals(31, DominioCaba.LUGARES.size());
+        assertEquals(51, DominioCaba.CALLES.size());
         assertEquals(8, DominioCaba.SUMINISTROS.size());
     }
 

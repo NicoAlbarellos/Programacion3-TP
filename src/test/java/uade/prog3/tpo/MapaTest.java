@@ -13,15 +13,15 @@ import static org.junit.jupiter.api.Assertions.*;
 class MapaTest {
 
     @Test
-    void dominioCabaTiene12LugaresY21CallesSinRepetir() {
+    void dominioCabaTiene31LugaresY51CallesSinRepetir() {
         Mapa mapa = Mapa.desde(GrafosDePrueba.dominioCaba(), List.of());
-        assertEquals(12, mapa.lugares().size());
-        assertEquals(21, mapa.calles().size(), "cada calle una sola vez, no las 42 entradas");
+        assertEquals(31, mapa.lugares().size());
+        assertEquals(51, mapa.calles().size(), "cada calle una sola vez, no las 102 entradas");
         double total = 0;
         for (Mapa.Calle c : mapa.calles()) {
             total += c.costo();
         }
-        assertEquals(661.0, total, 1e-9, "suma de los 21 costos del dominio");
+        assertEquals(1782.0, total, 1e-9, "suma de los 51 costos del dominio");
     }
 
     @Test

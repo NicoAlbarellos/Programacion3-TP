@@ -24,10 +24,14 @@ class ArbolRecubrimientoTest {
 
     private final ArbolRecubrimiento arbol = new ArbolRecubrimiento(new Ordenamiento());
 
-    /** MST del dominio: unico, 11 aristas, 287 minutos. */
+    /** MST del dominio: unico, 30 aristas, 835 minutos (en el orden en que las acepta Kruskal). */
     private static final Set<String> MST_DOMINIO = Set.of(
-            "HIT-PCE 18.0", "CUN-MON 18.0", "PMA-RET 18.0", "ABA-HIT 19.0", "OBE-PMA 20.0", "REC-RET 20.0",
-            "HIT-PAL 21.0", "ABA-OBE 28.0", "CON-LBO 29.0", "CON-PMA 30.0", "MON-PAL 66.0");
+            "ABA-HIT 15.0", "CON-HGA 15.0", "PMA-RES 15.0", "CGR-OBE 18.0", "CON-SAN 18.0",
+            "CHA-COL 19.0", "CAB-PCE 20.0", "CUN-MON 20.0", "HIT-PCE 20.0", "PMA-SAN 20.0",
+            "AEP-PLA 21.0", "OBE-RET 23.0", "PAL-PLA 23.0", "BEL-MON 24.0", "REC-RET 26.0",
+            "ABA-CGR 27.0", "BEL-COL 27.0", "BOE-CAB 27.0", "OBE-PMA 28.0", "CAB-PCH 29.0",
+            "AGR-VUR 31.0", "CON-LBO 32.0", "SAA-VUR 35.0", "FLO-PCH 36.0", "CHA-PCE 37.0",
+            "PAL-REC 40.0", "AGR-DEV 43.0", "MON-SAA 43.0", "MAT-VEL 45.0", "DEV-VEL 58.0");
 
     /** MST de la semilla no dirigida: 7 aristas, costo 27 (verificacion de la clase 5). */
     private static final Set<String> MST_SEMILLA = Set.of(
@@ -52,17 +56,17 @@ class ArbolRecubrimientoTest {
 
     @Test
     void primDominioDesdeRetiro() {
-        verificar(arbol.prim(GrafosDePrueba.dominioCaba(), "RET"), 11, 287, MST_DOMINIO);
+        verificar(arbol.prim(GrafosDePrueba.dominioCaba(), "RET"), 30, 835, MST_DOMINIO);
     }
 
     @Test
     void primDominioDaElMismoArbolDesdeOtroOrigen() {
-        verificar(arbol.prim(GrafosDePrueba.dominioCaba(), "CUN"), 11, 287, MST_DOMINIO);
+        verificar(arbol.prim(GrafosDePrueba.dominioCaba(), "CUN"), 30, 835, MST_DOMINIO);
     }
 
     @Test
     void kruskalDominio() {
-        verificar(arbol.kruskal(GrafosDePrueba.dominioCaba()), 11, 287, MST_DOMINIO);
+        verificar(arbol.kruskal(GrafosDePrueba.dominioCaba()), 30, 835, MST_DOMINIO);
     }
 
     @Test

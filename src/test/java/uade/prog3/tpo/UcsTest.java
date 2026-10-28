@@ -13,7 +13,7 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * Tests de UCS con resultados calculados a mano. No tocan Neo4j.
  * UCS tiene que dar el mismo camino y costo que Dijkstra, expandiendo igual o menos nodos.
- * El dominio tiene 12 lugares, todos alcanzables: Dijkstra expande siempre 12.
+ * El dominio tiene 31 lugares, todos alcanzables: Dijkstra expande siempre 31.
  */
 class UcsTest {
 
@@ -31,40 +31,41 @@ class UcsTest {
     }
 
     @Test
-    void palermoACiudadUniversitaria() {
-        // PAL-MON 66 + MON-CUN 18 = 84. CUN se descubre primero por el directo (90),
-        // pero recien sale de la cola con 84. Queda sin expandir LBO (el mas lejano de PAL).
-        ResultadoUcs r = verificar(GrafosDePrueba.dominioCaba(), "PAL", "CUN", 84, List.of("PAL", "MON", "CUN"));
+    void retiroAPuertoMadero() {
+        // RET-PMA directo 36. Orden de salida: RET 0, OBE 23, REC 26, PMA 36 -> fin.
+        ResultadoUcs r = verificar(GrafosDePrueba.dominioCaba(), "RET", "PMA", 36, List.of("RET", "PMA"));
+        assertEquals(4, r.nodosExpandidosUcs());
+        assertEquals(31, r.nodosExpandidosDijkstra());
+    }
+
+    @Test
+    void garrahanALaBocaRelajaAntesDeSacarlo() {
+        // LBO entra a la cola con 51 (directo) y baja a 47 al expandir CON.
+        // Orden de salida: HGA 0, CON 15, SAN 33, BOE 36, LBO 47 -> fin.
+        ResultadoUcs r = verificar(GrafosDePrueba.dominioCaba(), "HGA", "LBO", 47, List.of("HGA", "CON", "LBO"));
+        assertEquals(5, r.nodosExpandidosUcs());
+        assertEquals(31, r.nodosExpandidosDijkstra());
+    }
+
+    @Test
+    void obeliscoAHospitalItalianoCortaTemprano() {
+        // OBE-CGR 18 + CGR-ABA 27 + ABA-HIT 15 = 60. Salen los 10 lugares a menos de 60
+        // (OBE 0, CGR 18, RET 23, PMA 28, REC 31, CON 40, RES 43, ABA 45, SAN 48, HGA 55)
+        // y despues HIT 60: 11 contra 31.
+        ResultadoUcs r = verificar(GrafosDePrueba.dominioCaba(), "OBE", "HIT", 60,
+                List.of("OBE", "CGR", "ABA", "HIT"));
         assertEquals(11, r.nodosExpandidosUcs());
-        assertEquals(12, r.nodosExpandidosDijkstra());
+        assertEquals(31, r.nodosExpandidosDijkstra());
     }
 
     @Test
-    void retiroACiudadUniversitariaExpandeTodo() {
-        // RET-PAL 45 + PAL-MON 66 + MON-CUN 18 = 129. CUN es el mas lejano de RET:
-        // sale ultimo de la cola, asi que UCS no ahorra nada (peor caso = Dijkstra).
-        ResultadoUcs r = verificar(GrafosDePrueba.dominioCaba(), "RET", "CUN", 129,
-                List.of("RET", "PAL", "MON", "CUN"));
-        assertEquals(12, r.nodosExpandidosUcs());
-        assertEquals(12, r.nodosExpandidosDijkstra());
-    }
-
-    @Test
-    void laBocaAHospitalItalianoCortaTemprano() {
-        // LBO-CON 29 + CON-ABA 36 + ABA-HIT 19 = 84.
-        // Orden de salida: LBO 0, CON 29, PMA 36, RET 54, OBE 56, ABA 65, REC 74, HIT 84 -> fin.
-        // Quedan sin expandir PCE 95, PAL 99, MON y CUN: 8 contra 12.
-        ResultadoUcs r = verificar(GrafosDePrueba.dominioCaba(), "LBO", "HIT", 84,
-                List.of("LBO", "CON", "ABA", "HIT"));
-        assertEquals(8, r.nodosExpandidosUcs());
-        assertEquals(12, r.nodosExpandidosDijkstra());
-    }
-
-    @Test
-    void retiroAPuertoMaderoVecinoMasCercano() {
-        // RET-PMA 18 es la arista mas barata de RET: sale RET 0, luego PMA 18 -> fin.
-        ResultadoUcs r = verificar(GrafosDePrueba.dominioCaba(), "RET", "PMA", 18, List.of("RET", "PMA"));
-        assertEquals(2, r.nodosExpandidosUcs());
+    void mataderosACiudadUniversitariaExpandeTodo() {
+        // CUN es el lugar mas lejano de MAT (263): sale ultimo de la cola,
+        // asi que UCS no ahorra nada (peor caso = Dijkstra).
+        ResultadoUcs r = verificar(GrafosDePrueba.dominioCaba(), "MAT", "CUN", 263,
+                List.of("MAT", "FLO", "CAB", "PCE", "CHA", "COL", "BEL", "MON", "CUN"));
+        assertEquals(31, r.nodosExpandidosUcs());
+        assertEquals(31, r.nodosExpandidosDijkstra());
     }
 
     @Test

@@ -11,13 +11,19 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * Tests de BFS y DFS con resultados calculados a mano. No tocan Neo4j.
  *
- * Listas de adyacencia del dominio (orden de carga):
- *   ABA: HIT PCE REC CON OBE      OBE: ABA CON PMA REC RET
- *   CON: ABA LBO OBE PMA          PAL: HIT CUN MON REC RET
- *   CUN: MON PAL                  PCE: ABA HIT
- *   HIT: ABA PAL PCE              PMA: OBE CON LBO RET
- *   LBO: CON PMA                  REC: ABA OBE PAL RET
- *   MON: CUN PAL                  RET: OBE PAL PMA REC
+ * Listas de adyacencia del dominio (orden de carga, por id):
+ *   ABA: BOE CGR HIT REC       FLO: CAB MAT PCH VEL       PCH: BOE CAB FLO
+ *   AEP: BEL CUN PLA           HGA: BOE CON LBO           PLA: AEP COL PAL
+ *   AGR: CHA DEV VUR           HIT: ABA PAL PCE           PMA: OBE RES RET SAN
+ *   BEL: AEP COL MON SAA       LBO: CON HGA SAN           REC: ABA OBE PAL RET
+ *   BOE: ABA CAB HGA PCH       MAT: FLO VEL               RES: PMA
+ *   CAB: BOE FLO PCE PCH       MON: BEL CUN SAA           RET: OBE PMA REC
+ *   CGR: ABA CON OBE           OBE: CGR CON PMA REC RET   SAA: BEL MON VUR
+ *   CHA: AGR COL PAL PCE       PAL: CHA HIT PLA REC       SAN: CON LBO PMA
+ *   COL: BEL CHA PLA VUR       PCE: CAB CHA HIT           VEL: DEV FLO MAT
+ *   CON: CGR HGA LBO OBE SAN                              VUR: AGR COL SAA
+ *   CUN: AEP MON
+ *   DEV: AGR VEL
  */
 class RecorridosTest {
 
@@ -37,19 +43,30 @@ class RecorridosTest {
 
     @Test
     void bfsDominioDesdeRetiro() {
-        // nivel 0: RET | nivel 1: OBE PAL PMA REC | nivel 2: ABA CON (de OBE),
-        // HIT CUN MON (de PAL), LBO (de PMA) | nivel 3: PCE (de ABA)
-        assertEquals(List.of("RET", "OBE", "PAL", "PMA", "REC",
-                        "ABA", "CON", "HIT", "CUN", "MON", "LBO", "PCE"),
+        // nivel 0: RET | 1: OBE PMA REC | 2: CGR CON (de OBE), RES SAN (de PMA), ABA PAL (de REC)
+        // 3: HGA LBO (de CON), BOE HIT (de ABA), CHA PLA (de PAL)
+        // 4: CAB PCH (de BOE), PCE (de HIT), AGR COL (de CHA), AEP (de PLA)
+        // 5: FLO (de CAB), DEV VUR (de AGR), BEL (de COL), CUN (de AEP)
+        // 6: MAT VEL (de FLO), SAA (de VUR), MON (de BEL)
+        assertEquals(List.of("RET", "OBE", "PMA", "REC",
+                        "CGR", "CON", "RES", "SAN", "ABA", "PAL",
+                        "HGA", "LBO", "BOE", "HIT", "CHA", "PLA",
+                        "CAB", "PCH", "PCE", "AGR", "COL", "AEP",
+                        "FLO", "DEV", "VUR", "BEL", "CUN",
+                        "MAT", "VEL", "SAA", "MON"),
                 recorridos.bfs(GrafosDePrueba.dominioCaba(), "RET"));
     }
 
     @Test
     void dfsDominioDesdeRetiro() {
-        // RET > OBE > ABA > HIT > PAL > CUN > MON, retrocede a PAL > REC,
-        // retrocede a HIT > PCE, retrocede a ABA > CON > LBO > PMA
-        assertEquals(List.of("RET", "OBE", "ABA", "HIT", "PAL", "CUN",
-                        "MON", "REC", "PCE", "CON", "LBO", "PMA"),
+        // RET > OBE > CGR > ABA > BOE > CAB > FLO > MAT > VEL > DEV > AGR > CHA > COL > BEL
+        // > AEP > CUN > MON > SAA > VUR, retrocede a COL > PLA > PAL > HIT > PCE,
+        // retrocede a PAL > REC, retrocede a CAB > PCH, retrocede a BOE > HGA > CON > LBO > SAN
+        // > PMA > RES
+        assertEquals(List.of("RET", "OBE", "CGR", "ABA", "BOE", "CAB", "FLO", "MAT",
+                        "VEL", "DEV", "AGR", "CHA", "COL", "BEL", "AEP", "CUN",
+                        "MON", "SAA", "VUR", "PLA", "PAL", "HIT", "PCE", "REC",
+                        "PCH", "HGA", "CON", "LBO", "SAN", "PMA", "RES"),
                 recorridos.dfs(GrafosDePrueba.dominioCaba(), "RET"));
     }
 
@@ -80,9 +97,9 @@ class RecorridosTest {
     }
 
     @Test
-    void dominioTiene12VerticesY21Aristas() {
+    void dominioTiene31VerticesY51Aristas() {
         Grafo g = GrafosDePrueba.dominioCaba();
-        assertEquals(12, g.cantidadVertices());
-        assertEquals(21, g.cantidadAristas());
+        assertEquals(31, g.cantidadVertices());
+        assertEquals(51, g.cantidadAristas());
     }
 }

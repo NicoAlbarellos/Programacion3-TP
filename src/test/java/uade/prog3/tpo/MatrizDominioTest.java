@@ -35,20 +35,22 @@ class MatrizDominioTest {
     }
 
     @Test
-    void retiroObeliscoCuesta22EnLosDosSentidos() {
-        assertEquals(22.0, costo("RET", "OBE"));
-        assertEquals(22.0, costo("OBE", "RET"));
+    void retiroObeliscoCuesta23EnLosDosSentidos() {
+        assertEquals(23.0, costo("RET", "OBE"));
+        assertEquals(23.0, costo("OBE", "RET"));
     }
 
     @Test
     void guardaElCostoDirectoAunqueNoSeaElMinimo() {
-        // PAL-CUN directo cuesta 90; el camino minimo (84, por MON) lo calcula Floyd, no la matriz
-        assertEquals(90.0, costo("PAL", "CUN"));
+        // HGA-LBO directo cuesta 51; el camino minimo (47, por CON) lo calcula Floyd, no la matriz
+        assertEquals(51.0, costo("HGA", "LBO"));
+        assertEquals(51.0, costo("LBO", "HGA"));
     }
 
     @Test
     void sinCalleDirectaEsInfinito() {
         assertEquals(Grafo.INFINITO, costo("RET", "CUN"));
+        assertEquals(Grafo.INFINITO, costo("PAL", "CUN"));
     }
 
     @Test
