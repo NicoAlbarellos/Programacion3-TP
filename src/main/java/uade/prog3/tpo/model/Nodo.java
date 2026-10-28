@@ -41,6 +41,11 @@ public class Nodo {
      */
     private double valor;
 
+    /**
+     * Calles que salen de este lugar. En la app las calles NO se guardan desde aca:
+     * CargaInicial las crea con Cypher. Ojo: un save() de un Nodo con esta lista
+     * vacia BORRARIA sus relaciones CONECTA en la base.
+     */
     @Relationship(type = "CONECTA", direction = OUTGOING)
     private List<Conexion> conexiones = new ArrayList<>();
 
@@ -54,6 +59,7 @@ public class Nodo {
         this.valor = valor;
     }
 
+    /** Agrega una calle en memoria (la carga real de calles va por Cypher en CargaInicial). */
     public void conectar(Nodo destino, double costo) {
         this.conexiones.add(new Conexion(destino, costo));
     }
